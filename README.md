@@ -6,11 +6,14 @@ This repository includes four assignments in Digital Image Processing and Comput
 
 ## Overview
 
-## Assignments
-
 | Assignment | Content | Progress |
 |:---:|---|---|
 | 1 | - Understand and master digital image representation, particularly the relationship between color images and grayscale images. Comprehend the role of color channels in the formation and reconstruction of color images.<br> - Understand the principles and effects of spatial-domain image filtering, including low-pass filters and high-pass filters. | 0%|
 | 2 | | |
 | 3 | | |
 | 4 | | |
+
+## Prequisites
+## Quick Start
+## Project Structure
+## License
