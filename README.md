@@ -1,5 +1,5 @@
 # Digital Image Processing and Computer Vision Assignments - Semester 252
-This repository includes four assignments in Digital Image Processing and Computer Vision Course at Ho Chi Minh University of Technology - VNUHCM.
+This repository includes four assignments in Digital Image Processing and Computer Vision Course at Ho Chi Minh University of Technology - VNUHCM, semester 252.
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-Academic-green.svg)](LICENSE)
@@ -13,7 +13,11 @@ This repository includes four assignments in Digital Image Processing and Comput
 | 3 | | |
 | 4 | | |
 
-## Prequisites
+## Prerequisites
+- Python 3.12 or higher
+- Familiar with basic Machine Learning
+- Experience in programming with Python
 ## Quick Start
 ## Project Structure
 ## License
+This project has implemented for academic purpose only.
