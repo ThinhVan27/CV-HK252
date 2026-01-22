@@ -15,8 +15,10 @@ This repository includes four assignments in Digital Image Processing and Comput
 
 ## Prerequisites
 - Python 3.12 or higher
-- Familiar with basic Machine Learning
 - Experience in programming with Python
+- Have knowledge about Calculus/ Linear Algebra/ Probability & Statistics and general Mathematics.
+- Familiar with basic Machine Learning/ Deep Learning
+
 ## Quick Start
 ## Project Structure
 ## License
