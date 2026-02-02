@@ -6,9 +6,9 @@ This repository includes four assignments in Digital Image Processing and Comput
 
 ## Overview
 
-| Assignment | Content | Progress |
+| Assignment | Content | Colab Notebook |
 |:---:|---|---|
-| 1 | - Understand and master digital image representation, particularly the relationship between color images and grayscale images. Comprehend the role of color channels in the formation and reconstruction of color images.<br> - Understand the principles and effects of spatial-domain image filtering, including low-pass filters and high-pass filters. | 0%|
+| 1 | - Understand and master digital image representation, particularly the relationship between color images and grayscale images. Comprehend the role of color channels in the formation and reconstruction of color images.<br> - Understand the principles and effects of spatial-domain image filtering, including low-pass filters and high-pass filters. | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/14Kgd-kxSDykKYH0xwh6aFLY98qrFkqph?usp=sharing)|
 | 2 | | |
 | 3 | | |
 | 4 | | |
