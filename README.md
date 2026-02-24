@@ -6,7 +6,7 @@ This repository includes four assignments in Digital Image Processing and Comput
 
 ## Overview
 
-| Assignment | Content | Colab Notebook |
+| Assignment | Target | Colab Notebook |
 |:---:|---|---|
 | 1 | - Understand and master digital image representation, particularly the relationship between color images and grayscale images. Comprehend the role of color channels in the formation and reconstruction of color images.<br> - Understand the principles and effects of spatial-domain image filtering, including low-pass filters and high-pass filters. | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1zdEs-BdALYo9ZlPimKYUhOgAcnWtZzzH?usp=sharing)|
 | 2 | - Understand and apply image editing techniques in the gradient domain (Gradient Domain Editing). <br> - Master basic and advanced geometric transformations in Computer Vision. <br> - Distinguish and evaluate the differences between affine and projective transformations. <br> - Practice skills in implementation, visualization, and analysis of image processing results.| [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1462S78DcQIz1u6G3vBrfEY8es-Q8bptI?usp=sharing)|
