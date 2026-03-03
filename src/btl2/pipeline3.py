@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-
 class ProjectiveTransformPipeline:
 	"""Pipeline for projective transformation to paste source image onto background"""
 	def __init__(self):
@@ -20,6 +19,7 @@ class ProjectiveTransformPipeline:
 			pt: Source image (numpy array)
 			bg: Background image (numpy array)
 			dst_pts: Frame object containing 4 destination points on background
+			inter: whether return the intermediate results. Default: True
 			
 		Returns:
 			final_result: Composited image and intermediate steps
@@ -69,17 +69,20 @@ class ProjectiveTransformPipeline:
 	def visualize_result(self, inter=True):
 		"""
 		Visualize results
+  
+		Args:
+			inter: whether plot the imtermediate results. Default: True
 		"""
-		fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+		if inter == True:
+			fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+			
+			try:
+				axes[0, 0].imshow(self.pt)
+				axes[0, 0].set_title("Source Image")
+				axes[0, 0].axis(False)
+			except Exception as e:
+				print(f"[ERROR] {e.__str__()}")
 		
-		try:
-			axes[0, 0].imshow(self.pt)
-			axes[0, 0].set_title("Source Image")
-			axes[0, 0].axis(False)
-		except Exception as e:
-			print(f"[ERROR] {e.__str__()}")
-		
-		if inter:
 			try:
 				bg_display = self.bg.copy()
 				axes[0, 1].imshow(bg_display)
@@ -117,6 +120,33 @@ class ProjectiveTransformPipeline:
 				axes[1, 2].axis(False)
 			except Exception as e:
 				print(f"[ERROR] {e.__str__()}")
+    
+		else:
+			fig, axes = plt.subplots(1, 3, figsize=(15, 10))
+			try:
+				axes[0].imshow(self.pt)
+				axes[0].set_title("Source Image")
+				axes[0].axis(False)
+			except Exception as e:
+				print(f"[ERROR] {e.__str__()}")
 		
+			try:
+				bg_display = self.bg.copy()
+				axes[1].imshow(bg_display)
+				for i, pt_coord in enumerate(self.pts_dst):
+					axes[1].plot(pt_coord[0], pt_coord[1], 'ro', markersize=8)
+					axes[1].text(pt_coord[0], pt_coord[1], f"  {i}", color='red', fontsize=10)
+				axes[1].set_title("Background with Destination Points")
+				axes[1].axis(False)
+			except Exception as e:
+				print(f"[ERROR] {e.__str__()}")
+
+			try:
+				axes[2].imshow(self.final_result)
+				axes[2].set_title("Final Result")
+				axes[2].axis(False)
+			except Exception as e:
+				print(f"[ERROR] {e.__str__()}")
+
 		plt.tight_layout()
 		plt.show()
