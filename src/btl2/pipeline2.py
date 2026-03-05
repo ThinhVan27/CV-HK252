@@ -55,7 +55,7 @@ class TransformationPipeline:
         if isinstance(self.config, list):
             self._run_multiple_config()
         elif isinstance(self.config, Config):
-            self._run_single_config(self.config)
+            self._run_single_config(self.config, True)
         else:
             print("[ERROR] config type is error")
 
