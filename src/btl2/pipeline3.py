@@ -47,7 +47,7 @@ class ProjectiveTransformPipeline:
         # Step 1: Prepare images
         src_img = self._prepare_image(src_img_path)
         bg_img = self._prepare_image(bg_img_path)
-        if isinstance(pts_dst, Frame):
+        if isinstance(frame, Frame):
             pts_dst = frame.to_array()
         elif frame.shape != (4, 2):
             pts_dst = frame
