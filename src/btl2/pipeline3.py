@@ -15,11 +15,23 @@ class Frame:
         return np.array([list(self.tl), list(self.tr), list(self.br), list(self.bl)], dtype=np.float32)
 
 
+@dataclass
+class Result:
+    """Result container for projective transformation pipeline"""
+    final_result: np.ndarray
+    warped_img_clean: np.ndarray
+    bg_blacked_out: np.ndarray
+    src_img: np.ndarray
+    bg_img: np.ndarray
+    homography_matrix: np.ndarray
+    destination_points: np.ndarray
+
+
 class ProjectiveTransformPipeline:
     """Stateless pipeline for projective transformation to paste source image onto background"""
     
     def run(self, src_img_path: Union[str, np.ndarray], bg_img_path: Union[str, np.ndarray], 
-            frame: Frame, visualize: bool = False) -> np.ndarray:
+            frame: Union[Frame, np.ndarray], visualize: bool = False) -> Result:
         """
         Apply projective transformation to paste source image onto background
         
@@ -30,12 +42,17 @@ class ProjectiveTransformPipeline:
             visualize: whether to display the results. Default: False
             
         Returns:
-            final_result: Composited image
+            Result: Container with all pipeline results
         """
         # Step 1: Prepare images
         src_img = self._prepare_image(src_img_path)
         bg_img = self._prepare_image(bg_img_path)
-        pts_dst = frame.to_array()
+        if isinstance(pts_dst, Frame):
+            pts_dst = frame.to_array()
+        elif frame.shape != (4, 2):
+            pts_dst = frame
+        else:
+            raise ValueError(f"Invalid frame shape {frame.shape}")
         
         # Step 2: Calculate homography
         matrix_H = self._calc_homography(src_img, pts_dst)
@@ -45,12 +62,22 @@ class ProjectiveTransformPipeline:
             src_img, bg_img, matrix_H, pts_dst
         )
         
-        # Step 4: Visualize if requested
-        if visualize:
-            self._visualize_result(src_img, bg_img, pts_dst, warped_img_clean, 
-                                   bg_blacked_out, final_result)
+        # Step 4: Create result container
+        result = Result(
+            final_result=final_result,
+            warped_img_clean=warped_img_clean,
+            bg_blacked_out=bg_blacked_out,
+            src_img=src_img,
+            bg_img=bg_img,
+            homography_matrix=matrix_H,
+            destination_points=pts_dst
+        )
         
-        return final_result
+        # Step 5: Visualize if requested
+        if visualize:
+            self._visualize_result(result)
+        
+        return result
     
     def _prepare_image(self, img_input: Union[str, np.ndarray]) -> np.ndarray:
         """
@@ -133,33 +160,26 @@ class ProjectiveTransformPipeline:
         
         return warped_img_clean, bg_blacked_out, final_result
     
-    def _visualize_result(self, src_img: np.ndarray, bg_img: np.ndarray, pts_dst: np.ndarray,
-                          warped_img_clean: np.ndarray, bg_blacked_out: np.ndarray, 
-                          final_result: np.ndarray) -> None:
+    def _visualize_result(self, result: Result) -> None:
         """
         Visualize results
         
         Args:
-            src_img: Source image
-            bg_img: Background image
-            pts_dst: Destination points
-            warped_img_clean: Clean warped image
-            bg_blacked_out: Background with hole
-            final_result: Final composited result
+            result: Result container with all pipeline outputs
         """
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
         
         try:
-            axes[0, 0].imshow(src_img)
+            axes[0, 0].imshow(result.src_img)
             axes[0, 0].set_title("Source Image")
             axes[0, 0].axis(False)
         except Exception as e:
             print(f"[ERROR] {e.__str__()}")
         
         try:
-            bg_display = bg_img.copy()
+            bg_display = result.bg_img.copy()
             axes[0, 1].imshow(bg_display)
-            for i, pt_coord in enumerate(pts_dst):
+            for i, pt_coord in enumerate(result.destination_points):
                 axes[0, 1].plot(pt_coord[0], pt_coord[1], 'ro', markersize=8)
                 axes[0, 1].text(pt_coord[0], pt_coord[1], f"  {i}", color='red', fontsize=10)
             axes[0, 1].set_title("Background with Destination Points")
@@ -168,15 +188,16 @@ class ProjectiveTransformPipeline:
             print(f"[ERROR] {e.__str__()}")
         
         try:
-            axes[0, 2].imshow(warped_img_clean)
+            axes[0, 2].imshow(result.warped_img_clean)
             axes[0, 2].set_title("Warped Image (Clean)")
             axes[0, 2].axis(False)
         except Exception as e:
             print(f"[ERROR] {e.__str__()}")
         
         try:
-            mask = np.zeros_like(bg_img[:, :, 0])
-            cv2.fillConvexPoly(mask, pts_dst.astype(np.int32), 255)
+            h_bg, w_bg = result.bg_img.shape[:2]
+            mask = np.zeros((h_bg, w_bg), dtype=np.uint8)
+            cv2.fillConvexPoly(mask, result.destination_points.astype(np.int32), 255)
             axes[1, 0].imshow(mask, cmap='gray')
             axes[1, 0].set_title("Mask")
             axes[1, 0].axis(False)
@@ -184,14 +205,14 @@ class ProjectiveTransformPipeline:
             print(f"[ERROR] {e.__str__()}")
         
         try:
-            axes[1, 1].imshow(bg_blacked_out)
+            axes[1, 1].imshow(result.bg_blacked_out)
             axes[1, 1].set_title("Background with Hole")
             axes[1, 1].axis(False)
         except Exception as e:
             print(f"[ERROR] {e.__str__()}")
 
         try:
-            axes[1, 2].imshow(final_result)
+            axes[1, 2].imshow(result.final_result)
             axes[1, 2].set_title("Final Result")
             axes[1, 2].axis(False)
         except Exception as e:
