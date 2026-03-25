@@ -152,11 +152,8 @@ class Pipeline:
         # ======================================
         # Stage 1: Preprocessing: Chuyển về ảnh xám
         # ======================================
-        print("_run_two_image")
         gray_train_img, train_img = self._preprocessing(left_img)
-        print("_run_two_image")
         gray_query_img, query_img = self._preprocessing(right_img)
-        print("_run_two_image")
         # ======================================
         # Stage 2: Trích xuất đặc trưng
         # ======================================
@@ -187,11 +184,9 @@ class Pipeline:
         # Stage 6: Hậu xử lí
         # ======================================
         final_result = self._post_processing(result)
-        print("finale")
         return final_result
 
     def _run_multiple_image(self, images):
-        print("multiple")
         return reduce(lambda x, y: self._run_two_image(x, y), images[1:], images[0])
 
     @staticmethod
