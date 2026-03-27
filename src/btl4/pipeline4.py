@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, Any, List, Union, Optional, Tuple
 
-from .pipeline import *
+from .base_pipeline import *
 
  
 class SegmentationPipeline(BasePipeline):
