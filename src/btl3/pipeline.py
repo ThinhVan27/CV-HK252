@@ -75,10 +75,32 @@ class PCASIFT(FeatureExtractor):
         return keypoints, descriptors
 
 
-class SURF(PCASIFT):
-    """Backward-compatible alias. SURF was replaced by PCA-SIFT in this project."""
+class SURF(FeatureExtractor):
+    matcher_norm = cv2.NORM_L2
 
-    pass
+    def __init__(
+        self,
+        hessianThreshold: float = 400,
+        nOctaves: int = 4,
+        nOctaveLayers: int = 3,
+        extended: bool = False,
+        upright: bool = False,
+    ):
+        if not hasattr(cv2, "xfeatures2d") or not hasattr(cv2.xfeatures2d, "SURF_create"):
+            raise RuntimeError(
+                "SURF is unavailable. Build OpenCV with contrib + OPENCV_ENABLE_NONFREE=ON."
+            )
+        self.al = cv2.xfeatures2d.SURF_create(
+            hessianThreshold=hessianThreshold,
+            nOctaves=nOctaves,
+            nOctaveLayers=nOctaveLayers,
+            extended=extended,
+            upright=upright,
+        )
+
+    def extract(self, img):
+        return self.al.detectAndCompute(img, None)
+
 
 
 # =======================================
