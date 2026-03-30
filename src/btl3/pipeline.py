@@ -37,9 +37,12 @@ class ORB(FeatureExtractor):
         return self.al.detectAndCompute(img, None)
 
 
-# TODO: thêm các bộ trích xuất đặc trưng
-# Yêu cầu phải kế thừa FeatureExtractor
-# ................
+class SURF(FeatureExtractor):
+    def __init__(self):
+        self.al = cv2.SURF_create()
+
+    def extract(self, img):
+        return self.al.detectAndCompute(img, None)
 
 
 # =======================================
