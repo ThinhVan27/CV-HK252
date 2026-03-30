@@ -5,6 +5,7 @@ from typing import List, TypedDict
 import numpy as np
 import matplotlib.pyplot as plt
 from functools import reduce
+from enum import Enum
 
 
 # ======================================
@@ -45,55 +46,55 @@ class ORB(FeatureExtractor):
 # Trộn ảnh
 # =======================================
 class BlendingBase(ABC):
+
     @abstractmethod
-    def blend(self, query_img, train_img, homo_matrix):
+    def blend(self, train_img, query_img, homo_matrix):
         pass
-
-
-class AlphaBlending(BlendingBase):
-
-    def blend(self, query_image, train_image, homo_matrix):
-        width_query_img = query_image.shape[1]
-        width_train_img = train_image.shape[1]
-        lowest_width = min(width_query_img, width_train_img)
-        smoothing_window_percent = 0.10
-        self.smoothing_window_size = max(
-            100, min(smoothing_window_percent * lowest_width, 1000)
-        )
-        height_img1 = query_image.shape[0]
-        width_img1 = query_image.shape[1]
-        width_img2 = train_image.shape[1]
-        height_panorama = height_img1
-        width_panorama = width_img1 + width_img2
-
-        panorama1 = np.zeros((height_panorama, width_panorama, 3), dtype=np.float32)
-        mask1 = self._create_mask(query_image, train_image, version="left")
-        panorama1[0 : query_image.shape[0], 0 : query_image.shape[1], :] = (
-            query_image.astype(np.float32)
-        )
-        panorama1 *= mask1
-        mask2 = self._create_mask(query_image, train_image, version="right")
-        panorama2 = (
-            cv2.warpPerspective(
-                train_image, homo_matrix, (width_panorama, height_panorama)
-            )
-            * mask2
-        )
-        result = panorama1 + panorama2
+    
+    def _post_processing(self, result):
         rows, cols = np.where(result[:, :, 0] != 0)
         min_row, max_row = min(rows), max(rows) + 1
         min_col, max_col = min(cols), max(cols) + 1
         final_result = result[min_row:max_row, min_col:max_col, :]
         return np.clip(final_result, 0, 255).astype(np.uint8)
 
-    def _create_mask(self, query_image, train_image, version="left"):
-        height_query_img = query_image.shape[0]
+
+class AlphaBlending(BlendingBase):
+    
+    def blend(self, train_image, query_image, homo_matrix):
+        # return self.blend_(train_image, query_image, homo_matrix)
+        height_img1 = train_image.shape[0]
+        width_img1 = train_image.shape[1]
+        width_img2 = query_image.shape[1]
+        height_panorama = height_img1
+        width_panorama = width_img1 + width_img2
+        panorama1 = np.zeros((height_panorama, width_panorama, 3), dtype=np.float32)
+        mask1 = self._create_mask(train_image, query_image, version="left")
+        panorama1[:, : width_img1, :] = (
+            train_image.astype(np.float32)
+        )
+        panorama1 *= mask1
+        mask2 = self._create_mask(train_image, query_image, version="right")
+        panorama2 = (
+            cv2.warpPerspective(
+                query_image, homo_matrix, (width_panorama, height_panorama)
+            )
+            * mask2
+        )
+        result = panorama1 + panorama2
+        return self._post_processing(result)
+
+    def _create_mask(self, train_image, query_image, version="left"):
+        height_train_img, width_train_img = train_image.shape[:2]
         width_query_img = query_image.shape[1]
-        width_train_img = train_image.shape[1]
-        height_panorama = height_query_img
+        height_panorama = height_train_img
         width_panorama = width_query_img + width_train_img
-        offset = int(self.smoothing_window_size / 2)
-        barrier = query_image.shape[1] - int(self.smoothing_window_size / 2)
+        smoothing_window_percent = 0.3
+        smoothing_window_size = max(
+            100, min(smoothing_window_percent * min(width_query_img, width_train_img), 1000)
+        )
+        offset = int(smoothing_window_size / 2)
+        barrier = train_image.shape[1] - offset
         mask = np.zeros((height_panorama, width_panorama), dtype=np.float32)
         if version == "left":
             mask[:, barrier - offset : barrier + offset] = np.tile(
@@ -108,10 +109,87 @@ class AlphaBlending(BlendingBase):
         return cv2.merge([mask, mask, mask])
 
 
-# TODO: thêm các thuật toán trộn ảnh
-# Yêu cầu phải kế thừa Blending
+class PoissonBlending(BlendingBase):
+    """Poisson blending class"""
+    
+    def __init__(self):
+        super().__init__()
+    
+    def blend(self, train_img, query_img, H):
+        """Blending `query_img` on the right of `train_img`
 
+        Args:
+            train_img (`np.ndarray`)
+            query_img (`np.ndarray`)
+            H (`np.ndarray`): _homography matrix to transform_ `query_img` _to_ `train_img`
 
+        Returns:
+            result: _blended image_
+        """
+        panorama1, panorama2 = self._init_panorama(train_img, query_img, H)
+        blended_roi, result = self._blend_roi_region(panorama1, panorama2)
+        return self._post_processing(result)
+    
+    def _init_panorama(self, train_img, query_img, H):
+        """ Initialize panorama base.
+
+        Args:
+            train_img (`np.ndarray`):
+            query_img (`np.ndarray`):
+            H (`np.ndarray`):  _homography matrix to transform_ `query_img` _to_ `train_img`
+
+        Returns:
+            panorama1, panorama2 
+        """
+        height_train, width_train = train_img.shape[:2]
+        height_query, width_query = query_img.shape[:2]
+        height_panorama = height_train
+        width_panorama = width_query + width_train
+        panorama1 = np.zeros((height_panorama, width_panorama, 3), dtype=np.uint8)
+        panorama1[:height_train, :width_train, :] = train_img
+        panorama2 = cv2.warpPerspective(query_img, H, (width_panorama, height_panorama)).astype(np.uint8)
+        return panorama1, panorama2
+    
+    def _blend_roi_region(self, panorama1, panorama2):
+        """Blending ROI region
+
+        Args:
+            panorama1 (`np.ndarray`)
+            panorama2 (`np.ndarray`)
+
+        Returns:
+            roi_region: _blended region_
+            result: _blended image_
+        """
+        mask1 = np.any(panorama1 != 0, axis=-1)
+        base_target = panorama2.copy()
+        base_target[mask1] = panorama1[mask1] 
+        mask2 = np.any(panorama2 != 0, axis=-1).astype(np.uint8) * 255
+        kernel = np.ones((5, 5), np.uint8)
+        mask2_eroded = cv2.erode(mask2, kernel, iterations=1)
+        x, y, w, h = cv2.boundingRect(mask2_eroded)
+        if w == 0 or h == 0:
+            return self._post_processing(base_target)
+        roi_src = panorama2[y:y+h, x:x+w]
+        roi_dst = base_target[y:y+h, x:x+w]
+        roi_mask = mask2_eroded[y:y+h, x:x+w]
+        center = (w // 2, h // 2)
+        try:
+            blended_roi = cv2.seamlessClone(
+                src=roi_src,
+                dst=roi_dst,
+                mask=roi_mask,
+                p=center,
+                flags=cv2.NORMAL_CLONE
+            )
+        except Exception as e:
+            print(f"[ERROR] Error at bleding process: {repr(e)}")
+            blended_roi = roi_dst
+        blended_img = base_target.copy()
+        blended_img[y:y+h, x:x+w] = blended_roi
+        return blended_roi, blended_img
+        
+        
 class Config(TypedDict):
     extractor: FeatureExtractor
     blending: BlendingBase
@@ -139,7 +217,8 @@ class Pipeline:
                 result = self._run_multiple_image(images)
             Pipeline.visualize(result)
         except Exception as e:
-            print(f"[Run]: {e}")
+            raise e
+            # print(f"[Run]: {e}")
 
     def _preprocessing(self, img):
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -176,7 +255,6 @@ class Pipeline:
         # ======================================
         # Stage 5: Căn chỉnh, ghép và trộn ảnh
         # ======================================
-        # H maps left(train) -> right(query), so invert it to warp right -> left.
         H_inv = np.linalg.inv(H)
         result = self.blending.blend(train_img, query_img, H_inv)
         # BGR
@@ -210,10 +288,10 @@ class Pipeline:
             )
 
     @staticmethod
-    def visualize(image):
+    def visualize(image, name=None):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         plt.imshow(image)
-        plt.title("Result of Image Stitching")
+        plt.title("Result of Image Stitching" if not name else name)
         plt.show()
 
 
@@ -223,4 +301,4 @@ if __name__ == "__main__":
     pl = Pipeline(config)
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     root = os.path.join(root, "img", "btl3")
-    pl.run(root, ["image1.jpg", "image2.jpg", "image3.jpg"])
+    pl.run(os.path.join(root, "Desk"), ["image1.jpg", "image2.jpg", "image3.jpg"])
