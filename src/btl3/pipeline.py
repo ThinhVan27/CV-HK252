@@ -102,6 +102,14 @@ class SURF(FeatureExtractor):
         return self.al.detectAndCompute(img, None)
 
 
+class AKAZE(FeatureExtractor):
+    matcher_norm = cv2.NORM_HAMMING
+
+    def __init__(self):
+        self.al = cv2.AKAZE_create()
+
+    def extract(self, img):
+        return self.al.detectAndCompute(img, None)
 
 # =======================================
 # Trộn ảnh
