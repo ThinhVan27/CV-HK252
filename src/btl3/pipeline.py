@@ -5,13 +5,14 @@ from typing import List, TypedDict
 import numpy as np
 import matplotlib.pyplot as plt
 from functools import reduce
-from enum import Enum
 
 
 # ======================================
 # Định nghĩa các bộ trích xuất đặc trưng
 # ======================================
 class FeatureExtractor(ABC):
+    matcher_norm = cv2.NORM_L2
+
     @abstractmethod
     def extract(self, img: np.ndarray):
         """
@@ -30,6 +31,8 @@ class SIFT(FeatureExtractor):
 
 
 class ORB(FeatureExtractor):
+    matcher_norm = cv2.NORM_HAMMING
+
     def __init__(self):
         self.al = cv2.ORB_create()
 
@@ -37,12 +40,45 @@ class ORB(FeatureExtractor):
         return self.al.detectAndCompute(img, None)
 
 
-class SURF(FeatureExtractor):
-    def __init__(self):
-        self.al = cv2.SURF_create()
+class PCASIFT(FeatureExtractor):
+    """PCA-SIFT approximation: detect with SIFT, then reduce descriptors by PCA."""
+
+    matcher_norm = cv2.NORM_L2
+
+    def __init__(self, n_components: int = 36, nfeatures: int = 0):
+        self.al = cv2.SIFT_create(nfeatures=nfeatures)
+        self.n_components = n_components
+
+    def _pca_reduce(self, descriptors: np.ndarray) -> np.ndarray:
+        if descriptors.ndim != 2:
+            raise ValueError("Descriptors must have shape (N, D).")
+
+        num_components = int(
+            max(1, min(self.n_components, descriptors.shape[0], descriptors.shape[1]))
+        )
+        centered = descriptors - np.mean(descriptors, axis=0, keepdims=True)
+        _, _, vt = np.linalg.svd(centered, full_matrices=False)
+        projection = vt[:num_components]
+        reduced = centered @ projection.T
+
+        # Normalize each descriptor for more stable matching with L2 distance.
+        norms = np.linalg.norm(reduced, axis=1, keepdims=True)
+        reduced = reduced / np.clip(norms, 1e-12, None)
+        return reduced.astype(np.float32)
 
     def extract(self, img):
-        return self.al.detectAndCompute(img, None)
+        keypoints, descriptors = self.al.detectAndCompute(img, None)
+        if descriptors is None:
+            return keypoints, None
+        descriptors = descriptors.astype(np.float32)
+        descriptors = self._pca_reduce(descriptors)
+        return keypoints, descriptors
+
+
+class SURF(PCASIFT):
+    """Backward-compatible alias. SURF was replaced by PCA-SIFT in this project."""
+
+    pass
 
 
 # =======================================
@@ -244,7 +280,11 @@ class Pipeline:
         # ======================================
         # Stage 3: Matching các đặc trưng
         # ======================================
-        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+        if features_train is None or features_query is None:
+            raise RuntimeError("Cannot match features because descriptor extraction failed.")
+
+        matcher_norm = getattr(self.extractor, "matcher_norm", cv2.NORM_L2)
+        bf = cv2.BFMatcher(matcher_norm, crossCheck=True)
         best_matches = bf.match(features_query, features_train)
         matches = sorted(best_matches, key=lambda x: x.distance)
 
