@@ -68,7 +68,6 @@ class AlphaBlending(BlendingBase):
         width_img2 = query_image.shape[1]
         height_panorama = height_img1
         width_panorama = width_img1 + width_img2
-
         panorama1 = np.zeros((height_panorama, width_panorama, 3), dtype=np.float32)
         mask1 = self._create_mask(train_image, query_image, version="left")
         panorama1[:, : width_img1, :] = (
@@ -83,8 +82,6 @@ class AlphaBlending(BlendingBase):
             * mask2
         )
         result = panorama1 + panorama2
-        Pipeline.visualize(np.clip(panorama1, 0, 255).astype(np.uint8))
-        Pipeline.visualize(np.clip(panorama2, 0, 255).astype(np.uint8))
         return self._post_processing(result)
 
     def _create_mask(self, train_image, query_image, version="left"):
@@ -124,16 +121,26 @@ class PoissonBlending(BlendingBase):
         Args:
             train_img (`np.ndarray`)
             query_img (`np.ndarray`)
-            H (`np.ndarray`): homography matrix to transform `query_img` to `train_img`
+            H (`np.ndarray`): _homography matrix to transform_ `query_img` _to_ `train_img`
 
         Returns:
-            result: blended image
+            result: _blended image_
         """
         panorama1, panorama2 = self._init_panorama(train_img, query_img, H)
         blended_roi, result = self._blend_roi_region(panorama1, panorama2)
         return self._post_processing(result)
     
     def _init_panorama(self, train_img, query_img, H):
+        """ Initialize panorama base.
+
+        Args:
+            train_img (`np.ndarray`):
+            query_img (`np.ndarray`):
+            H (`np.ndarray`):  _homography matrix to transform_ `query_img` _to_ `train_img`
+
+        Returns:
+            panorama1, panorama2 
+        """
         height_train, width_train = train_img.shape[:2]
         height_query, width_query = query_img.shape[:2]
         height_panorama = height_train
@@ -151,8 +158,8 @@ class PoissonBlending(BlendingBase):
             panorama2 (`np.ndarray`)
 
         Returns:
-            roi_region: blended region
-            result: blended image
+            roi_region: _blended region_
+            result: _blended image_
         """
         mask1 = np.any(panorama1 != 0, axis=-1)
         base_target = panorama2.copy()
