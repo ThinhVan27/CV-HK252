@@ -296,6 +296,37 @@ class Pipeline:
     def _post_processing(self, x):
         return x
 
+    def _match_features(self, features_query, features_train):
+        # FLANN needs LSH for binary descriptors and KDTree for float descriptors.
+        if features_query.dtype == np.uint8 and features_train.dtype == np.uint8:
+            index_params = {
+                "algorithm": 6,
+                "table_number": 6,
+                "key_size": 12,
+                "multi_probe_level": 1,
+            }
+            search_params = {"checks": 50}
+            matcher = cv2.FlannBasedMatcher(index_params, search_params)
+            knn_matches = matcher.knnMatch(features_query, features_train, k=2)
+        else:
+            query_float = np.asarray(features_query, dtype=np.float32)
+            train_float = np.asarray(features_train, dtype=np.float32)
+            index_params = {"algorithm": 1, "trees": 5}
+            search_params = {"checks": 50}
+            matcher = cv2.FlannBasedMatcher(index_params, search_params)
+            knn_matches = matcher.knnMatch(query_float, train_float, k=2)
+
+        ratio_thresh = 0.75
+        good_matches = []
+        for pair in knn_matches:
+            if len(pair) < 2:
+                continue
+            m, n = pair
+            if m.distance < ratio_thresh * n.distance:
+                good_matches.append(m)
+
+        return sorted(good_matches, key=lambda x: x.distance)
+
     def _run_two_image(self, left_img, right_img):
         # ======================================
         # Stage 1: Preprocessing: Chuyển về ảnh xám
@@ -313,16 +344,17 @@ class Pipeline:
         if features_train is None or features_query is None:
             raise RuntimeError("Cannot match features because descriptor extraction failed.")
 
-        matcher_norm = getattr(self.extractor, "matcher_norm", cv2.NORM_L2)
-        bf = cv2.BFMatcher(matcher_norm, crossCheck=True)
-        best_matches = bf.match(features_query, features_train)
-        matches = sorted(best_matches, key=lambda x: x.distance)
+        matches = self._match_features(features_query, features_train)
+        if len(matches) < 4:
+            raise RuntimeError(
+                f"Not enough good matches after FLANN ratio test: {len(matches)}"
+            )
 
         # ======================================
         # Stage 4: Tìm ma trận Homo
         # ======================================
         _, H, _ = Pipeline.compute_homography(
-            keypoints_train, keypoints_query, matches, 5
+            keypoints_train, keypoints_query, matches, 2
         )
 
         # ======================================
@@ -338,7 +370,11 @@ class Pipeline:
         return final_result
 
     def _run_multiple_image(self, images):
-        return reduce(lambda x, y: self._run_two_image(x, y), images[1:], images[0])
+        mid = len(images) // 2
+        left_images = images[:mid]
+        right_images = images[mid:]
+        left_result = reduce(lambda x, y: self._run_two_image(y, x), left_images[1:], left_images[0])
+        return reduce(lambda x, y: self._run_two_image(x, y), right_images, left_result)
 
     @staticmethod
     def compute_homography(keypoints_train, keypoints_query, matches, reprojThresh):
@@ -370,8 +406,8 @@ class Pipeline:
 
 if __name__ == "__main__":
 
-    config = {"extractor": SIFT(), "blending": AlphaBlending()}
+    config = {"extractor": SIFT(), "blending": PoissonBlending()}
     pl = Pipeline(config)
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     root = os.path.join(root, "img", "btl3")
-    pl.run(os.path.join(root, "Desk"), ["image1.jpg", "image2.jpg", "image3.jpg"])
+    pl.run(os.path.join(root, "BK"), [ "image1.jpg","image2.jpg","image3.jpg", "image4.jpg"])
