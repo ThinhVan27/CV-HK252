@@ -345,9 +345,10 @@ class Pipeline:
 
         matches = self._match_features(features_query, features_train)
         if len(matches) < 4:
-            raise RuntimeError(
-                f"Not enough good matches after FLANN ratio test: {len(matches)}"
+            print(
+                f"[ERROR] Not enough good matches after FLANN ratio test: {len(matches)}"
             )
+            return {'result': left_img}
 
         # ======================================
         # Stage 4: Tìm ma trận Homo
