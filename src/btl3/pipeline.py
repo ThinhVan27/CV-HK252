@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from functools import reduce
 from evaluation import *
 import pandas as pd
+import time
 
 # ======================================
 # Định nghĩa các bộ trích xuất đặc trưng
@@ -275,6 +276,7 @@ class Pipeline:
             image_names: Tên các ảnh cần ghép từ trái sang phải
         """
         images = [cv2.imread(os.path.join(img_root, e)) for e in image_names]
+        start = time.time()
         try:
             if len(images) < 2:
                 raise ValueError("At least 2 images are required for stitching")
@@ -282,6 +284,8 @@ class Pipeline:
                 result = self._run_two_image(images[0], images[1])
             else:
                 result = self._run_multiple_image(images)
+            end = time.time()
+            result["time(s)"] = int(end - start)
             Pipeline.visualize(result['result'])
             return result
         except Exception as e:
