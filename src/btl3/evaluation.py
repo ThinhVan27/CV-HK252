@@ -80,7 +80,7 @@ def _draw_matches_with_thickness(
     right_image: np.ndarray,
     keypoints_right: list[cv2.KeyPoint],
     matches: list[cv2.DMatch],
-    line_thickness: int = 2,
+    line_thickness: int = 5,
 ) -> np.ndarray:
     thickness = max(1, int(line_thickness))
     try:
@@ -233,7 +233,7 @@ def visualize_feature_matches(
     ratio_thresh: float = 0.75,
     show: bool = True,
     figsize: tuple[float, float] = (14, 6),
-    match_line_thickness: int = 2,
+    match_line_thickness: int = 5,
 ) -> dict[str, Any]:
     """Draw line-based matches between two images for a feature extractor."""
     left_gray = _gray(left_image)
@@ -292,7 +292,7 @@ def evaluate_stitching_pair(
     ratio_thresh: float = 0.75,
     reproj_thresh: float = 2.0,
     max_matches_to_draw: int = 80,
-    match_line_thickness: int = 2,
+    match_line_thickness: int = 5,
     show: bool = True,
     figsize: tuple[float, float] = (18, 5),
 ) -> dict[str, Any]:
