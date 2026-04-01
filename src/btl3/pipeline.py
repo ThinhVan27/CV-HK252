@@ -5,7 +5,8 @@ from typing import List, TypedDict
 import numpy as np
 import matplotlib.pyplot as plt
 from functools import reduce
-
+from evaluation import *
+import pandas as pd
 
 # ======================================
 # Định nghĩa các bộ trích xuất đặc trưng
@@ -75,33 +76,6 @@ class PCASIFT(FeatureExtractor):
         return keypoints, descriptors
 
 
-class SURF(FeatureExtractor):
-    matcher_norm = cv2.NORM_L2
-
-    def __init__(
-        self,
-        hessianThreshold: float = 400,
-        nOctaves: int = 4,
-        nOctaveLayers: int = 3,
-        extended: bool = False,
-        upright: bool = False,
-    ):
-        if not hasattr(cv2, "xfeatures2d") or not hasattr(cv2.xfeatures2d, "SURF_create"):
-            raise RuntimeError(
-                "SURF is unavailable. Build OpenCV with contrib + OPENCV_ENABLE_NONFREE=ON."
-            )
-        self.al = cv2.xfeatures2d.SURF_create(
-            hessianThreshold=hessianThreshold,
-            nOctaves=nOctaves,
-            nOctaveLayers=nOctaveLayers,
-            extended=extended,
-            upright=upright,
-        )
-
-    def extract(self, img):
-        return self.al.detectAndCompute(img, None)
-
-
 class AKAZE(FeatureExtractor):
     matcher_norm = cv2.NORM_HAMMING
 
@@ -130,6 +104,9 @@ class BlendingBase(ABC):
 
 class AlphaBlending(BlendingBase):
     
+    def accept(self, visitor):
+        return visitor.visitAlpha(self)
+    
     def blend(self, train_image, query_image, homo_matrix):
         # return self.blend_(train_image, query_image, homo_matrix)
         height_img1 = train_image.shape[0]
@@ -142,14 +119,15 @@ class AlphaBlending(BlendingBase):
         panorama1[:, : width_img1, :] = (
             train_image.astype(np.float32)
         )
+        cache_panorama1 = panorama1
         panorama1 *= mask1
         mask2 = self._create_mask(train_image, query_image, version="right")
-        panorama2 = (
-            cv2.warpPerspective(
+        panorama2 = cv2.warpPerspective(
                 query_image, homo_matrix, (width_panorama, height_panorama)
-            )
-            * mask2
-        )
+            ).astype(np.float32)
+        cache_panorama2 = panorama2
+        panorama2 *= mask2
+        self.panorama = (cache_panorama1, cache_panorama2)
         result = panorama1 + panorama2
         return self._post_processing(result)
 
@@ -183,6 +161,9 @@ class PoissonBlending(BlendingBase):
     
     def __init__(self):
         super().__init__()
+        
+    def accept(self, visitor):
+        return visitor.visitPoisson(self)
     
     def blend(self, train_img, query_img, H):
         """Blending `query_img` on the right of `train_img`
@@ -217,6 +198,7 @@ class PoissonBlending(BlendingBase):
         panorama1 = np.zeros((height_panorama, width_panorama, 3), dtype=np.uint8)
         panorama1[:height_train, :width_train, :] = train_img
         panorama2 = cv2.warpPerspective(query_img, H, (width_panorama, height_panorama)).astype(np.uint8)
+        self.panorama = (panorama1, panorama2)
         return panorama1, panorama2
     
     def _blend_roi_region(self, panorama1, panorama2):
@@ -284,7 +266,8 @@ class Pipeline:
                 result = self._run_two_image(images[0], images[1])
             else:
                 result = self._run_multiple_image(images)
-            Pipeline.visualize(result)
+            Pipeline.visualize(result['result'])
+            return result
         except Exception as e:
             raise e
             # print(f"[Run]: {e}")
@@ -361,20 +344,28 @@ class Pipeline:
         # Stage 5: Căn chỉnh, ghép và trộn ảnh
         # ======================================
         H_inv = np.linalg.inv(H)
-        result = self.blending.blend(train_img, query_img, H_inv)
+        result_img = self.blending.blend(train_img, query_img, H_inv)
         # BGR
         # ======================================
         # Stage 6: Hậu xử lí
         # ======================================
-        final_result = self._post_processing(result)
-        return final_result
+        result_img = self._post_processing(result_img)
+        
+        info = {
+            "result": result_img,
+            "kp_train": len(keypoints_train),
+            "kp_query": len(keypoints_query),
+            "n_matches": len(matches)
+        }
+        return info
 
     def _run_multiple_image(self, images):
         mid = len(images) // 2
         left_images = images[:mid]
         right_images = images[mid:]
-        left_result = reduce(lambda x, y: self._run_two_image(y, x), left_images[1:], left_images[0])
-        return reduce(lambda x, y: self._run_two_image(x, y), right_images, left_result)
+        left_result = reduce(lambda x, y: self._run_two_image(y, x)['result'], left_images[1:], left_images[0])
+        result = reduce(lambda x, y: self._run_two_image(x, y)['result'], right_images, left_result)
+        return {"result": result}
 
     @staticmethod
     def compute_homography(keypoints_train, keypoints_query, matches, reprojThresh):
@@ -399,6 +390,8 @@ class Pipeline:
     @staticmethod
     def visualize(image, name=None):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        plt.axis(False)
+        plt.tight_layout()
         plt.imshow(image)
         plt.title("Result of Image Stitching" if not name else name)
         plt.show()
@@ -406,8 +399,12 @@ class Pipeline:
 
 if __name__ == "__main__":
 
-    config = {"extractor": SIFT(), "blending": PoissonBlending()}
+    v = BlendingVisitor()
+    blending = PoissonBlending()
+    config = {"extractor": AKAZE(), "blending": blending}
     pl = Pipeline(config)
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     root = os.path.join(root, "img", "btl3")
-    pl.run(os.path.join(root, "BK"), [ "image1.jpg","image2.jpg","image3.jpg", "image4.jpg"])
+    result = pl.run(os.path.join(root, "Lab"), [ "image2.jpg","image3.jpg"])
+    print(f"Num keypoints left: {result.get("kp_train", 0)} | Num keypoints right: {result.get("kp_query", 0)} | Num matches: {result.get("n_matches", 0)}")
+    print(blending.accept(v))

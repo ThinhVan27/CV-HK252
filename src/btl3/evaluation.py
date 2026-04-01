@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from abc import ABC
 from typing import Any
 
 import cv2
 import numpy as np
+from matplotlib import pyplot as plt
 
 try:
     from skimage.metrics import peak_signal_noise_ratio as skimage_psnr
@@ -11,6 +13,430 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     skimage_psnr = None
     skimage_ssim = None
+
+
+def _to_rgb(image_bgr: np.ndarray) -> np.ndarray:
+    if image_bgr.ndim == 2:
+        return cv2.cvtColor(image_bgr, cv2.COLOR_GRAY2RGB)
+    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+
+
+def _gray(image: np.ndarray) -> np.ndarray:
+    if image.ndim == 2:
+        return image
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+
+def _match_features_flann(
+    descriptors_query: np.ndarray,
+    descriptors_train: np.ndarray,
+    ratio_thresh: float = 0.75,
+) -> list[cv2.DMatch]:
+    if descriptors_query is None or descriptors_train is None:
+        return []
+    if len(descriptors_query) < 2 or len(descriptors_train) < 2:
+        return []
+
+    knn_matches: list[list[cv2.DMatch]]
+    if descriptors_query.dtype == np.uint8 and descriptors_train.dtype == np.uint8:
+        try:
+            index_params = {
+                "algorithm": 6,
+                "table_number": 6,
+                "key_size": 12,
+                "multi_probe_level": 1,
+            }
+            search_params = {"checks": 50}
+            matcher = cv2.FlannBasedMatcher(index_params, search_params)
+            knn_matches = matcher.knnMatch(descriptors_query, descriptors_train, k=2)
+        except cv2.error:
+            bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+            knn_matches = bf_matcher.knnMatch(descriptors_query, descriptors_train, k=2)
+    else:
+        query_float = np.asarray(descriptors_query, dtype=np.float32)
+        train_float = np.asarray(descriptors_train, dtype=np.float32)
+        try:
+            index_params = {"algorithm": 1, "trees": 5}
+            search_params = {"checks": 50}
+            matcher = cv2.FlannBasedMatcher(index_params, search_params)
+            knn_matches = matcher.knnMatch(query_float, train_float, k=2)
+        except cv2.error:
+            bf_matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+            knn_matches = bf_matcher.knnMatch(query_float, train_float, k=2)
+
+    good_matches: list[cv2.DMatch] = []
+    for pair in knn_matches:
+        if len(pair) < 2:
+            continue
+        m, n = pair
+        if m.distance < ratio_thresh * n.distance:
+            good_matches.append(m)
+    return sorted(good_matches, key=lambda x: x.distance)
+
+
+def _draw_matches_with_thickness(
+    left_image: np.ndarray,
+    keypoints_left: list[cv2.KeyPoint],
+    right_image: np.ndarray,
+    keypoints_right: list[cv2.KeyPoint],
+    matches: list[cv2.DMatch],
+    line_thickness: int = 2,
+) -> np.ndarray:
+    thickness = max(1, int(line_thickness))
+    try:
+        return cv2.drawMatches(
+            left_image,
+            keypoints_left,
+            right_image,
+            keypoints_right,
+            matches,
+            None,
+            matchesThickness=thickness,
+            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+        )
+    except TypeError:
+        vis = cv2.drawMatches(
+            left_image,
+            keypoints_left,
+            right_image,
+            keypoints_right,
+            matches,
+            None,
+            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+        )
+        if thickness <= 1:
+            return vis
+
+        x_offset = left_image.shape[1]
+        for match in matches:
+            p1 = np.round(keypoints_left[match.queryIdx].pt).astype(int)
+            p2 = np.round(keypoints_right[match.trainIdx].pt).astype(int)
+            pt1 = (int(p1[0]), int(p1[1]))
+            pt2 = (int(p2[0] + x_offset), int(p2[1]))
+            cv2.line(vis, pt1, pt2, (0, 255, 255), thickness, lineType=cv2.LINE_AA)
+        return vis
+
+
+def _swap_match_indices(matches: list[cv2.DMatch]) -> list[cv2.DMatch]:
+    """Return matches with query/train indices swapped for display alignment."""
+    swapped: list[cv2.DMatch] = []
+    for match in matches:
+        try:
+            swapped_match = cv2.DMatch(
+                _queryIdx=int(match.trainIdx),
+                _trainIdx=int(match.queryIdx),
+                _imgIdx=int(match.imgIdx),
+                _distance=float(match.distance),
+            )
+        except TypeError:
+            swapped_match = cv2.DMatch(
+                int(match.trainIdx),
+                int(match.queryIdx),
+                int(match.imgIdx),
+                float(match.distance),
+            )
+        swapped.append(swapped_match)
+    return swapped
+
+
+def visualize_extracted_features(
+    image: np.ndarray,
+    extractor: Any,
+    extractor_name: str,
+    max_keypoints: int = 300,
+    figsize: tuple[float, float] = (8, 6),
+    show: bool = True,
+) -> dict[str, Any]:
+    """Draw keypoints extracted by a single feature extractor."""
+    gray = _gray(image)
+    keypoints, descriptors = extractor.extract(gray)
+    keypoints = keypoints or []
+    selected = keypoints[:max_keypoints]
+    num_keypoints_total = int(len(keypoints))
+    num_keypoints_drawn = int(len(selected))
+
+    vis = cv2.drawKeypoints(
+        image,
+        selected,
+        None,
+        color=(0, 255, 0),
+        flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS,
+    )
+
+    if show:
+        plt.figure(figsize=figsize)
+        plt.imshow(_to_rgb(vis))
+        plt.axis("off")
+        plt.title(f"{extractor_name}: shown {num_keypoints_drawn}/{num_keypoints_total} keypoints")
+        plt.tight_layout()
+        plt.show()
+
+    return {
+        "extractor": extractor_name,
+        "num_keypoints": num_keypoints_total,
+        "num_keypoints_drawn": num_keypoints_drawn,
+        "descriptor_shape": None if descriptors is None else tuple(descriptors.shape),
+        "keypoints": keypoints,
+        "descriptors": descriptors,
+        "visualization": vis,
+    }
+
+
+def compare_extractors_features(
+    image: np.ndarray,
+    extractors: dict[str, Any],
+    max_keypoints: int = 250,
+    cols: int = 2,
+    figsize_per_plot: tuple[float, float] = (6, 4),
+    show: bool = True,
+) -> dict[str, dict[str, Any]]:
+    """Visualize keypoints from multiple extractors in a grid."""
+    results: dict[str, dict[str, Any]] = {}
+    for name, extractor in extractors.items():
+        results[name] = visualize_extracted_features(
+            image=image,
+            extractor=extractor,
+            extractor_name=name,
+            max_keypoints=max_keypoints,
+            show=False,
+        )
+
+    if show and len(results) > 0:
+        names = list(results.keys())
+        rows = int(np.ceil(len(names) / max(cols, 1)))
+        fig, axes = plt.subplots(
+            rows,
+            cols,
+            figsize=(figsize_per_plot[0] * cols, figsize_per_plot[1] * rows),
+        )
+        axes = np.array(axes, dtype=object).reshape(-1)
+        for i, name in enumerate(names):
+            axes[i].imshow(_to_rgb(results[name]["visualization"]))
+            axes[i].axis("off")
+            axes[i].set_title(
+                f"{name} ({results[name]['num_keypoints_drawn']}/{results[name]['num_keypoints']} kp)"
+            )
+        for i in range(len(names), len(axes)):
+            axes[i].axis("off")
+        plt.tight_layout()
+        plt.show()
+
+    return results
+
+
+def visualize_feature_matches(
+    left_image: np.ndarray,
+    right_image: np.ndarray,
+    extractor: Any,
+    extractor_name: str,
+    max_matches_to_draw: int = 80,
+    ratio_thresh: float = 0.75,
+    show: bool = True,
+    figsize: tuple[float, float] = (14, 6),
+    match_line_thickness: int = 2,
+) -> dict[str, Any]:
+    """Draw line-based matches between two images for a feature extractor."""
+    left_gray = _gray(left_image)
+    right_gray = _gray(right_image)
+
+    kp_train, desc_train = extractor.extract(left_gray)
+    kp_query, desc_query = extractor.extract(right_gray)
+    kp_train = kp_train or []
+    kp_query = kp_query or []
+
+    if desc_train is None or desc_query is None:
+        raise RuntimeError(f"{extractor_name} failed to compute descriptors for matching.")
+
+    raw_matches = _match_features_flann(desc_query, desc_train, ratio_thresh=ratio_thresh)
+    matches = _swap_match_indices(raw_matches)
+    max_draw = max(0, int(max_matches_to_draw))
+    num_matches_drawn = int(min(len(raw_matches), max_draw))
+    draw_matches = matches[:max_draw]
+    matches_vis = _draw_matches_with_thickness(
+        left_image,
+        kp_train,
+        right_image,
+        kp_query,
+        draw_matches,
+        line_thickness=match_line_thickness,
+    )
+
+    if show:
+        plt.figure(figsize=figsize)
+        plt.imshow(_to_rgb(matches_vis))
+        plt.axis("off")
+        plt.title(f"{extractor_name}: shown {num_matches_drawn}/{len(raw_matches)} good matches")
+        plt.tight_layout()
+        plt.show()
+
+    return {
+        "extractor": extractor_name,
+        "num_keypoints_left": int(len(kp_train)),
+        "num_keypoints_right": int(len(kp_query)),
+        "num_matches": int(len(raw_matches)),
+        "num_matches_drawn": num_matches_drawn,
+        "matches": matches,
+        "keypoints_left": kp_train,
+        "keypoints_right": kp_query,
+        "visualization": matches_vis,
+    }
+
+
+def evaluate_stitching_pair(
+    left_image: np.ndarray,
+    right_image: np.ndarray,
+    extractor: Any,
+    blending: Any,
+    extractor_name: str,
+    blending_name: str,
+    ratio_thresh: float = 0.75,
+    reproj_thresh: float = 2.0,
+    max_matches_to_draw: int = 80,
+    match_line_thickness: int = 2,
+    show: bool = True,
+    figsize: tuple[float, float] = (18, 5),
+) -> dict[str, Any]:
+    """Run full two-image stitching and return quantitative + visual metrics."""
+    left_gray = _gray(left_image)
+    right_gray = _gray(right_image)
+
+    keypoints_train, features_train = extractor.extract(left_gray)
+    keypoints_query, features_query = extractor.extract(right_gray)
+    keypoints_train = keypoints_train or []
+    keypoints_query = keypoints_query or []
+
+    if features_train is None or features_query is None:
+        raise RuntimeError("Descriptor extraction failed, cannot evaluate stitching.")
+
+    matches = _match_features_flann(features_query, features_train, ratio_thresh=ratio_thresh)
+    if len(matches) < 4:
+        raise RuntimeError(f"Not enough matches for homography: {len(matches)}")
+
+    points_train = np.float32([keypoints_train[m.trainIdx].pt for m in matches])
+    points_query = np.float32([keypoints_query[m.queryIdx].pt for m in matches])
+    homography, status = cv2.findHomography(points_train, points_query, cv2.RANSAC, reproj_thresh)
+    if homography is None:
+        raise RuntimeError("Homography estimation failed.")
+
+    homography_inv = np.linalg.inv(homography)
+    stitched = blending.blend(left_image, right_image, homography_inv)
+
+    blending_metrics: dict[str, float | int] = {}
+    if hasattr(blending, "accept"):
+        try:
+            blending_metrics = BlendingVisitor().visit(blending)
+        except Exception:
+            blending_metrics = {}
+
+    metrics = evaluate_from_matches(
+        keypoints_train=keypoints_train,
+        keypoints_query=keypoints_query,
+        matches=matches,
+        homography=homography,
+        status=status,
+    )
+    metrics.update(blending_metrics)
+    metrics["extractor"] = extractor_name
+    metrics["blending"] = blending_name
+
+    # FLANN is called as (query=right, train=left), so swap indices for left->right drawing.
+    draw_matches = _swap_match_indices(matches[: max(0, int(max_matches_to_draw))])
+    match_vis = _draw_matches_with_thickness(
+        left_image,
+        keypoints_train,
+        right_image,
+        keypoints_query,
+        draw_matches,
+        line_thickness=match_line_thickness,
+    )
+
+    if show:
+        fig, axes = plt.subplots(1, 3, figsize=figsize)
+        axes[0].imshow(_to_rgb(left_image))
+        axes[0].axis("off")
+        axes[0].set_title("Left image")
+        axes[1].imshow(_to_rgb(match_vis))
+        axes[1].axis("off")
+        axes[1].set_title(f"Matches ({len(matches)})")
+        axes[2].imshow(_to_rgb(stitched))
+        axes[2].axis("off")
+        axes[2].set_title(f"Stitched ({extractor_name} + {blending_name})")
+        plt.tight_layout()
+        plt.show()
+
+    return {
+        "metrics": metrics,
+        "status": status,
+        "homography": homography,
+        "stitched_image": stitched,
+        "matches_visualization": match_vis,
+        "matches": matches,
+        "keypoints_train": keypoints_train,
+        "keypoints_query": keypoints_query,
+    }
+
+
+def benchmark_extractors_and_blending(
+    left_image: np.ndarray,
+    right_image: np.ndarray,
+    extractors: dict[str, Any],
+    blending_factories: dict[str, Any],
+    ratio_thresh: float = 0.75,
+    reproj_thresh: float = 2.0,
+    show: bool = True,
+) -> list[dict[str, Any]]:
+    """Evaluate all extractor/blending combinations for one image pair."""
+    records: list[dict[str, Any]] = []
+    for extractor_name, extractor in extractors.items():
+        for blending_name, blending_factory in blending_factories.items():
+            blending = blending_factory()
+            try:
+                result = evaluate_stitching_pair(
+                    left_image=left_image,
+                    right_image=right_image,
+                    extractor=extractor,
+                    blending=blending,
+                    extractor_name=extractor_name,
+                    blending_name=blending_name,
+                    ratio_thresh=ratio_thresh,
+                    reproj_thresh=reproj_thresh,
+                    show=show,
+                )
+                row = dict(result["metrics"])
+                row["stitched_image"] = result["stitched_image"]
+                records.append(row)
+            except Exception as exc:
+                records.append(
+                    {
+                        "extractor": extractor_name,
+                        "blending": blending_name,
+                        "error": str(exc),
+                    }
+                )
+    return records
+
+
+def visualize_stitching_gallery(
+    benchmark_records: list[dict[str, Any]],
+    cols: int = 2,
+    figsize_per_plot: tuple[float, float] = (8, 5),
+) -> None:
+    """Visualize stitched outputs from benchmark records."""
+    valid = [row for row in benchmark_records if "stitched_image" in row]
+    if len(valid) == 0:
+        return
+
+    rows = int(np.ceil(len(valid) / max(1, cols)))
+    fig, axes = plt.subplots(rows, cols, figsize=(figsize_per_plot[0] * cols, figsize_per_plot[1] * rows))
+    axes = np.array(axes, dtype=object).reshape(-1)
+    for i, row in enumerate(valid):
+        axes[i].imshow(_to_rgb(row["stitched_image"]))
+        axes[i].axis("off")
+        axes[i].set_title(f"{row['extractor']} + {row['blending']}")
+    for i in range(len(valid), len(axes)):
+        axes[i].axis("off")
+    plt.tight_layout()
+    plt.show()
 
 
 def _to_points(points: np.ndarray | list[tuple[float, float]]) -> np.ndarray:
@@ -291,3 +717,63 @@ def evaluate_from_matches(
         **feature,
         **alignment,
     }
+
+
+class BaseVisitor(ABC):
+    def visit(self, obj: Any):
+        if not hasattr(obj, "accept"):
+            raise TypeError("Visited object must implement accept(visitor).")
+        return obj.accept(self)
+
+class BlendingVisitor(BaseVisitor):
+    """Evaluate SSIM on overlap region between two panoramas after homography warp."""
+
+    def __init__(self, data_range: float = 255.0, empty_value: int | float = 0):
+        self.data_range = float(data_range)
+        self.empty_value = empty_value
+
+    def _evaluate_overlap_ssim(
+        self,
+        panorama1: np.ndarray,
+        panorama2: np.ndarray,
+    ) -> dict[str, float | int]:
+        _ensure_same_shape(panorama1, panorama2)
+
+        overlap = overlap_mask(panorama1, panorama2, empty_value=self.empty_value)
+        overlap_pixels = int(np.count_nonzero(overlap))
+        overlap_ratio = float(overlap_pixels / overlap.size) if overlap.size > 0 else float("nan")
+
+        if overlap_pixels == 0:
+            score = float("nan")
+        else:
+            score = ssim(
+                image_true=panorama1,
+                image_test=panorama2,
+                data_range=self.data_range,
+                mask=overlap,
+            )
+
+        return {
+            "ssim_overlap": float(score),
+            "overlap_pixels": overlap_pixels,
+            "overlap_ratio": overlap_ratio,
+        }
+
+    def visitAlpha(self, blending):
+        if not hasattr(blending, "panorama"):
+            raise AttributeError(
+                "Alpha blending object has no panorama cache. "
+                "Please store (panorama1, panorama2) to blending.panorama before visiting."
+            )
+        panorama1, panorama2 = blending.panorama
+        return self._evaluate_overlap_ssim(panorama1, panorama2)
+
+    def visitPoisson(self, blending):
+        if not hasattr(blending, "panorama"):
+            raise AttributeError(
+                "Poisson blending object has no panorama cache. "
+                "Run blend() first so blending.panorama is available."
+            )
+        panorama1, panorama2 = blending.panorama
+        return self._evaluate_overlap_ssim(panorama1, panorama2)
+        
