@@ -29,6 +29,9 @@ class SIFT(FeatureExtractor):
 
     def extract(self, img):
         return self.al.detectAndCompute(img, None)
+    
+    def __str__(self):
+        return "SIFT"
 
 
 class ORB(FeatureExtractor):
@@ -39,6 +42,9 @@ class ORB(FeatureExtractor):
 
     def extract(self, img):
         return self.al.detectAndCompute(img, None)
+    
+    def __str__(self):
+        return "ORB"
 
 
 class PCASIFT(FeatureExtractor):
@@ -75,6 +81,8 @@ class PCASIFT(FeatureExtractor):
         descriptors = self._pca_reduce(descriptors)
         return keypoints, descriptors
 
+    def __str__(self):
+        return "PCA-SIFT"
 
 class AKAZE(FeatureExtractor):
     matcher_norm = cv2.NORM_HAMMING
@@ -84,6 +92,9 @@ class AKAZE(FeatureExtractor):
 
     def extract(self, img):
         return self.al.detectAndCompute(img, None)
+    
+    def __str__(self):
+        return "AKAZE"
 
 # =======================================
 # Trộn ảnh
@@ -155,6 +166,8 @@ class AlphaBlending(BlendingBase):
             mask[:, barrier + offset :] = 1
         return cv2.merge([mask, mask, mask])
 
+    def __str__(self):
+        return "Alpha Blending"
 
 class PoissonBlending(BlendingBase):
     """Poisson blending class"""
@@ -240,6 +253,9 @@ class PoissonBlending(BlendingBase):
         blended_img[y:y+h, x:x+w] = blended_roi
         return blended_roi, blended_img
         
+    def __str__(self):
+        return "Poisson Blending"
+    
         
 class Config(TypedDict):
     extractor: FeatureExtractor
@@ -337,7 +353,7 @@ class Pipeline:
         # Stage 4: Tìm ma trận Homo
         # ======================================
         _, H, _ = Pipeline.compute_homography(
-            keypoints_train, keypoints_query, matches, 2
+            keypoints_train, keypoints_query, matches, 5
         )
 
         # ======================================
