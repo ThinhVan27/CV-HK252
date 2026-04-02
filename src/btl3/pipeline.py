@@ -230,7 +230,7 @@ class PoissonBlending(BlendingBase):
         base_target = panorama2.copy()
         base_target[mask1] = panorama1[mask1] 
         mask2 = np.any(panorama2 != 0, axis=-1).astype(np.uint8) * 255
-        kernel = np.ones((5, 5), np.uint8)
+        kernel = np.ones((3, 3), np.uint8)
         mask2_eroded = cv2.erode(mask2, kernel, iterations=1)
         x, y, w, h = cv2.boundingRect(mask2_eroded)
         if w == 0 or h == 0:
@@ -348,7 +348,7 @@ class Pipeline:
             raise RuntimeError("Cannot match features because descriptor extraction failed.")
 
         matches = self._match_features(features_query, features_train)
-        if len(matches) < 4:
+        if len(matches) < 8:
             print(
                 f"[ERROR] Not enough good matches after FLANN ratio test: {len(matches)}"
             )
@@ -382,8 +382,8 @@ class Pipeline:
 
     def _run_multiple_image(self, images):
         mid = len(images) // 2
-        left_images = images[:mid]
-        right_images = images[mid:]
+        left_images = images[:mid+1]
+        right_images = images[mid+1:]
         left_result = reduce(lambda x, y: self._run_two_image(y, x)['result'], left_images[1:], left_images[0])
         result = reduce(lambda x, y: self._run_two_image(x, y)['result'], right_images, left_result)
         return {"result": result}
@@ -421,11 +421,11 @@ class Pipeline:
 if __name__ == "__main__":
 
     v = BlendingVisitor()
-    blending = PoissonBlending()
-    config = {"extractor": AKAZE(), "blending": blending}
+    blending = AlphaBlending()
+    config = {"extractor": ORB(), "blending": blending}
     pl = Pipeline(config)
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     root = os.path.join(root, "img", "btl3")
-    result = pl.run(os.path.join(root, "Lab"), [ "image2.jpg","image3.jpg"])
+    result = pl.run(os.path.join(root, "BK"), ["image1.jpg","image2.jpg"])
     print(f"Num keypoints left: {result.get("kp_train", 0)} | Num keypoints right: {result.get("kp_query", 0)} | Num matches: {result.get("n_matches", 0)}")
     print(blending.accept(v))
