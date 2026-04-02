@@ -285,7 +285,7 @@ class Pipeline:
             else:
                 result = self._run_multiple_image(images)
             end = time.time()
-            result["time(s)"] = int(end - start)
+            result["time(s)"] = float(end - start)
             Pipeline.visualize(result['result'])
             return result
         except Exception as e:
