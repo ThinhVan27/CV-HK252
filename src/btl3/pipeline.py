@@ -131,13 +131,13 @@ class AlphaBlending(BlendingBase):
         panorama1[:, : width_img1, :] = (
             train_image.astype(np.float32)
         )
-        cache_panorama1 = panorama1
+        cache_panorama1 = panorama1.copy()
         panorama1 *= mask1
         mask2 = self._create_mask(train_image, query_image, version="right")
         panorama2 = cv2.warpPerspective(
                 query_image, homo_matrix, (width_panorama, height_panorama)
             ).astype(np.float32)
-        cache_panorama2 = panorama2
+        cache_panorama2 = panorama2.copy()
         panorama2 *= mask2
         self.panorama = (cache_panorama1, cache_panorama2)
         result = panorama1 + panorama2
@@ -382,8 +382,8 @@ class Pipeline:
 
     def _run_multiple_image(self, images):
         mid = len(images) // 2
-        left_images = images[:mid+1]
-        right_images = images[mid+1:]
+        left_images = images[:mid]
+        right_images = images[mid:]
         left_result = reduce(lambda x, y: self._run_two_image(y, x)['result'], left_images[1:], left_images[0])
         result = reduce(lambda x, y: self._run_two_image(x, y)['result'], right_images, left_result)
         return {"result": result}
@@ -414,18 +414,18 @@ class Pipeline:
         plt.axis(False)
         plt.tight_layout()
         plt.imshow(image)
-        plt.title("Result of Image Stitching" if not name else name)
+        # plt.title("Result of Image Stitching" if not name else name)
         plt.show()
 
 
 if __name__ == "__main__":
 
     v = BlendingVisitor()
-    blending = AlphaBlending()
-    config = {"extractor": ORB(), "blending": blending}
+    blending = PoissonBlending()
+    config = {"extractor": SIFT(), "blending": blending}
     pl = Pipeline(config)
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     root = os.path.join(root, "img", "btl3")
-    result = pl.run(os.path.join(root, "BK"), ["image1.jpg","image2.jpg"])
+    result = pl.run(os.path.join(root, "Desk"), ["image1.jpg","image2.jpg", "image3.jpg"])
     print(f"Num keypoints left: {result.get("kp_train", 0)} | Num keypoints right: {result.get("kp_query", 0)} | Num matches: {result.get("n_matches", 0)}")
-    print(blending.accept(v))
+    # print(blending.accept(v))
