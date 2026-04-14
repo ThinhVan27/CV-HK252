@@ -25,17 +25,23 @@ class OverallSceneAnalysisPipeline(BasePipeline):
     """
     Scence Analysis Pipeline
     """
-    def __init__(self):
+    def __init__(self, segmentation_pipeline: Optional[SegmentationPipeline] = None):
         # Composition của các pipeline con
         self.preprocessor = DataPreprocessorPipeline()
         self.geometry_1 = GeometryFeaturePipeline()
         self.geometry_2 = PanoramaStitchingPipeline()
         self.detection = ObjectDetectionPipeline()
-        self.segmentation = SegmentationPipeline()
+        self.segmentation = segmentation_pipeline if segmentation_pipeline is not None else SegmentationPipeline()
 
         self.last_results = {}
 
-    def run(self, input: Union[str, List[str], List[np.ndarray]], visualize=True) -> Dict[str, Dict[str, Any]]:
+    def run(
+        self,
+        input: Union[str, List[str], List[np.ndarray]],
+        visualize: bool = True,
+        run_geometry_1: bool = True,
+        run_segmentation: bool = False,
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Run all pipeline and return each pipeline's result.
         
@@ -46,12 +52,21 @@ class OverallSceneAnalysisPipeline(BasePipeline):
         res['preprocess'] = self.preprocessor.run(input)
 
         preprocessed_rgb = res['preprocess']["rgb_images"]
-        self.visualize(res['preprocess'], "rgb_images", "Smooth Image")
+        if visualize:
+            self.visualize(res['preprocess'], "rgb_images", "Smooth Image")
 
-        res['geometry_1'] = self.geometry_1.run(preprocessed_rgb)
+        if run_geometry_1:
+            res['geometry_1'] = self.geometry_1.run(preprocessed_rgb)
+
+        if run_segmentation:
+            res['segmentation'] = self.segmentation.run(preprocessed_rgb, visualize=visualize)
+
         # res['geometry_2'] = self.geometry_2.run(preprocessed_rgb)
         # res['detection'] = self.detection.run(preprocessed_rgb)
-        # res['segmentation'] = self.segmentation.run(preprocessed_rgb)       
+        # detection and panorama pipelines are not fully implemented yet.
+
+        self.last_results = res
+        return res
 
 if __name__ == "__main__":
     data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
