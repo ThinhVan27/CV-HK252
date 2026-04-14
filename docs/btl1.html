@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="title" content="Landing Page for DIP - Dat Pham">
+  <meta name="description" content="Assignment for DIP course in HCMUT">
+  <meta name="keywords" content="Computer Vision, Digital Image Processing">
+  <meta name="author" content="Dat, Thinh, Tan, Quan">
+  <meta name="robots" content="index, follow">
+  <meta name="language" content="Vietnamese">
+  <meta property="og:type" content="landingpage">
+  
+  <!-- Preconnect for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://ajax.googleapis.com">
+  <link rel="preconnect" href="https://documentcloud.adobe.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
+
+  <!-- TODO: Replace with your paper title and authors -->
+  <title>Landing Page of DIP Assignment</title>
+  
+  <!-- Favicon and App Icons -->
+  <link rel="icon" type="image/svg-xml" href="static/images/favicon.svg">
+  <link rel="apple-touch-icon" href="static/images/favicon.svg">
+  
+  <!-- Critical CSS - Load synchronously -->
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+  
+  <!-- Non-critical CSS - Load asynchronously -->
+  <link rel="preload" href="static/css/bulma-carousel.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="static/css/bulma-slider.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="static/css/fontawesome.all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <link rel="preload" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  
+  <!-- Fallback for browsers that don't support preload -->
+  <noscript>
+    <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+    <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+    <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  </noscript>
+  
+  <!-- Fonts - Optimized loading -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Defer non-critical JavaScript -->
+  <script defer src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script defer src="static/js/bulma-carousel.min.js"></script>
+  <script defer src="static/js/bulma-slider.min.js"></script>
+  <script defer src="static/js/index.js"></script>
+  
+  <!-- Structured Data for Academic Papers -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ScholarlyArticle",
+    "headline": "PAPER_TITLE",
+    "description": "BRIEF_DESCRIPTION_OF_YOUR_RESEARCH_CONTRIBUTION_AND_FINDINGS",
+    "author": [
+      {
+        "@type": "Person",
+        "name": "FIRST_AUTHOR_NAME",
+        "affiliation": {
+          "@type": "Organization",
+          "name": "INSTITUTION_NAME"
+        }
+      },
+      {
+        "@type": "Person",
+        "name": "SECOND_AUTHOR_NAME",
+        "affiliation": {
+          "@type": "Organization",
+          "name": "INSTITUTION_NAME"
+        }
+      }
+    ],
+    "datePublished": "2024-01-01",
+    "publisher": {
+      "@type": "Organization",
+      "name": "CONFERENCE_OR_JOURNAL_NAME"
+    },
+    "url": "https://YOUR_DOMAIN.com/YOUR_PROJECT_PAGE",
+    "image": "https://YOUR_DOMAIN.com/static/images/social_preview.png",
+    "keywords": ["KEYWORD1", "KEYWORD2", "KEYWORD3", "machine learning", "computer vision"],
+    "abstract": "FULL_ABSTRACT_TEXT_HERE",
+    "citation": "BIBTEX_CITATION_HERE",
+    "isAccessibleForFree": true,
+    "license": "https://creativecommons.org/licenses/by/4.0/",
+    "mainEntity": {
+      "@type": "WebPage",
+      "@id": "https://YOUR_DOMAIN.com/YOUR_PROJECT_PAGE"
+    },
+    "about": [
+      {
+        "@type": "Thing",
+        "name": "RESEARCH_AREA_1"
+      },
+      {
+        "@type": "Thing", 
+        "name": "RESEARCH_AREA_2"
+      }
+    ]
+  }
+  </script>
+  
+  <!-- Website/Organization Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "INSTITUTION_OR_LAB_NAME",
+    "url": "https://YOUR_INSTITUTION_WEBSITE.com",
+    "logo": "https://YOUR_DOMAIN.com/static/images/favicon.ico",
+    "sameAs": [
+      "https://twitter.com/YOUR_TWITTER_HANDLE",
+      "https://github.com/YOUR_GITHUB_USERNAME"
+    ]
+  }
+  </script>
+</head>
+<body>
+
+
+  <!-- Scroll to Top Button -->
+  <button class="scroll-to-top" onclick="scrollToTop()" title="Scroll to top" aria-label="Scroll to top">
+    <i class="fas fa-chevron-up"></i>
+  </button>
+
+  <main id="main-content">
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+            <!-- TODO: Replace with your paper title -->
+            <h1 class="title is-1 publication-title">Bài tập lớn 1</h1>
+            <h1 class="title is-1 publication-title">Biểu diễn ảnh màu và lọc tín hiệu
+</h1>
+            <div class="is-size-5 publication-authors">
+              <!-- TODO: Replace with your paper authors and their personal links -->
+              <span class="author-block">
+                <a href="https://github.com/ThinhVan27" target="_blank">Thinh Vo Van</a><sup>*</sup>,</span>
+                <span class="author-block">
+                  <a href="SECOND AUTHOR PERSONAL LINK" target="_blank">Dat Pham Le Tien</a></span>
+                  <span class="author-block">
+                    <a href="THIRD AUTHOR PERSONAL LINK" target="_blank">Tan Nguyen Duy</a>
+                  </span>,
+                  <span class="author-block">
+                    <a href="THIRD AUTHOR PERSONAL LINK" target="_blank">Quan Nguyen Tran Anh</a>
+                  </span>
+                  </div>
+
+                  <div class="is-size-5 publication-authors">
+                    <!-- TODO: Replace with your institution and conference/journal info -->
+                    <span class="author-block">Trường Đại học Bách khoa - ĐHQG HCM<br>HCMUT</span>
+                    <!-- TODO: Remove this line if no equal contribution -->
+                    <span class="eql-cntrb"><small><br><sup>*</sup>Thuyền trưởng</small></span>
+                  </div>
+
+                  
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- Paper abstract -->
+<section class="section hero is-light">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Mục tiêu</h2>
+        <div class="content has-text-justified">
+          <p>Bài tập lớn 1 tập trung vào hai nhóm nội dung chính: biểu diễn ảnh màu - ảnh xám và lọc tín hiệu trong miền không gian.</p>
+          <ul>
+            <li>Biểu diễn ảnh RGB, chuyển đổi RGB sang grayscale và tái tạo pseudo-color từ ảnh xám.</li>
+            <li>Tách từng kênh màu R-G-B, kết hợp lại ảnh gốc và thử nghiệm hoán đổi/thay thế kênh để quan sát thay đổi thị giác.</li>
+            <li>Thiết kế pipeline lọc ảnh không gian để chạy thống nhất cho nhiều ảnh và nhiều kernel.</li>
+            <li>Đánh giá tác động của bộ lọc low-pass (Box, Gaussian) và high-pass (Sobel, Laplacian) lên chi tiết, biên và nhiễu.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End paper abstract -->
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Kết quả chính</h2>
+    <div class="content has-text-justified">
+      <p>Nhóm đã hiện thực quy trình thực nghiệm đầy đủ cho BTL1, từ nạp dữ liệu ảnh, phân tích kênh màu đến so sánh kết quả lọc ảnh trên nhiều dữ liệu khác nhau. Các quan sát nổi bật:</p>
+      <ul>
+        <li>Ảnh xám giữ cấu trúc cường độ nhưng mất thông tin sắc độ; ảnh pseudo-color chỉ lặp lại cường độ trên 3 kênh nên không khôi phục được màu gốc.</li>
+        <li>Mỗi kênh R-G-B đóng góp khác nhau vào chi tiết thị giác; việc hoán đổi kênh tạo sai lệch màu rõ rệt và giúp hiểu bản chất tổng hợp màu.</li>
+        <li>Box và Gaussian làm mượt ảnh, giảm nhiễu tần số cao; Gaussian cho kết quả tự nhiên hơn do trọng số tập trung ở tâm kernel.</li>
+        <li>Sobel nhấn mạnh biên theo hướng ngang/dọc, trong khi Laplacian phát hiện biên đa hướng và nhạy hơn với chi tiết nhỏ.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Phần 1: Biểu diễn ảnh màu và ảnh xám
+</h2>
+  </div>
+</section>
+
+
+<!-- Image carousel -->
+<section class="hero is-small">
+  <div class="hero-body">
+    <div class="container">
+      <div id="results-carousel" class="carousel results-carousel">
+       <div class="item">
+        <img src="static/images/btl1/1.1.png" alt="Bieu dien anh mau va anh xam" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Tách kênh màu RGB
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/1.2.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Chuyển từ RGB sang BGR
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/1.3.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Chuyển từ RGB sang GRB
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/1.4.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Chuyển từ RGB sang GR (Bỏ channel Blue)
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/1.5.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Chuyển từ RGB sang GGB
+        </h2>
+      </div>
+  </div>
+</div>
+</div>
+</section>
+<!-- End image carousel -->
+
+
+
+
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Phần 2: Lọc ảnh với low-pass và high-pass filter
+
+</h2>
+  </div>
+</section>
+
+
+<!-- Image carousel -->
+<section class="hero is-small">
+  <div class="hero-body">
+    <div class="container">
+      <div id="results-carousel" class="carousel results-carousel">
+       <div class="item">
+        <img src="static/images/btl1/2.1.png" alt="Bieu dien anh mau va anh xam" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Pipeline xử lí
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/2.2.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Lọc ảnh với kernel 5x5 (mean)
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/2.3.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Lọc ảnh với kernel Gaussian (k = 7, sigma = 1.0)
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/2.4.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Lọc ảnh với Sobel đứng (3x3)
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/2.5.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Lọc ảnh với Sobel ngang (3x3)
+        </h2>
+      </div>
+      <div class="item">
+        <img src="static/images/btl1/2.6.png" alt="Tach va ket hop kenh mau RGB" loading="lazy"/>
+        <h2 class="subtitle has-text-centered">
+          Lọc ảnh với Laplacian (3x3)
+        </h2>
+      </div>
+  </div>
+</div>
+</div>
+</section>
+<!-- End image carousel -->
+
+
+
+
+
+
+
+<!-- Paper poster -->
+<section class="hero is-small is-light">
+  <div class="hero-body">
+    <div class="container">
+      <h2 class="title">Báo cáo</h2>
+
+      <!-- TODO: Replace with your poster PDF -->
+      <iframe  src="static/pdfs/CV_Project_1_2313318_VoVanThinh_2310687_PhamLeTienDat_2312845_NguyenTranAnhQuan_2313054_NguyenDuyTan.pdf" width="100%" height="550">
+          </iframe>
+        
+      </div>
+    </div>
+  </section>
+<!--End paper poster -->
+
+
+
+<!--BibTex citation -->
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <div class="bibtex-header">
+        <h2 class="title">BibTeX</h2>
+        <button class="copy-bibtex-btn" onclick="copyBibTeX()" title="Copy BibTeX to clipboard">
+          <i class="fas fa-copy"></i>
+          <span class="copy-text">Copy</span>
+        </button>
+      </div>
+      <pre id="bibtex-code"><code>@misc{BTL1_CO3057_2026,
+  title={Bai tap lon 1: Bieu dien anh mau va loc tin hieu},
+  author={Vo Van Thinh and Pham Le Tien Dat and Nguyen Duy Tan and Nguyen Tran Anh Quan},
+  course={CO3057 - Xu ly anh so va Thi giac may tinh},
+  school={Truong Dai hoc Bach khoa - DHQG HCM},
+  year={2026},
+  note={Noi dung gom bieu dien anh RGB/grayscale, tach kenh mau, low-pass va high-pass filtering},
+  url={https://github.com/ThinhVan27/CV-HK252}
+}</code></pre>
+    </div>
+</section>
+<!--End BibTex citation -->
+
+
+  <footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+
+          <p>
+            This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+            You are free to borrow the source code of this website, we just ask that you link back to this page in the footer. <br> This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- Statcounter tracking code -->
+  
+<!-- You can add a tracker to track page visits by creating an account at statcounter.com -->
+
+    <!-- End of Statcounter Code -->
+
+  </body>
+  </html>
