@@ -7,11 +7,18 @@ from functools import wraps
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Union, Optional, Tuple
 
-from base_pipeline import *
-from pipeline1 import *
-from pipeline2 import *
-from pipeline3 import *
-from pipeline4 import *
+try:
+    from .base_pipeline import *
+    from .pipeline1 import *
+    from .pipeline2 import *
+    from .pipeline3 import *
+    from .pipeline4 import *
+except ImportError:
+    from base_pipeline import *
+    from pipeline1 import *
+    from pipeline2 import *
+    from pipeline3 import *
+    from pipeline4 import *
 
 
 class OverallSceneAnalysisPipeline(BasePipeline):

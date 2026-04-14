@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 from typing import Dict, Any, List, Union, Optional, Tuple, Literal
 from abc import ABC, abstractmethod
 
-from base_pipeline import *
+try:
+    from .base_pipeline import *
+except ImportError:
+    from base_pipeline import *
 
 
 class Detector(ABC):
