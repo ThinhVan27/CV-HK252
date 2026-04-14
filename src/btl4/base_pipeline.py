@@ -211,7 +211,8 @@ class DataPreprocessorPipeline(BasePipeline):
             raise ValueError("gaussian_ksize must be a positive odd integer")
         if ksize % 2 == 0:
             ksize += 1
-        return cv2.GaussianBlur(image, (ksize, ksize), sigmaX=self.gaussian_sigma)
+        smooth_img = cv2.GaussianBlur(image, (ksize, ksize), sigmaX=self.gaussian_sigma)
+        return np.clip(smooth_img, 0, 255).astype(np.uint8)
     
     def _sharpening(self, image: np.ndarray) -> np.ndarray:
         if not self.apply_sharpen:

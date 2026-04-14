@@ -39,6 +39,7 @@ class OverallSceneAnalysisPipeline(BasePipeline):
         res['preprocess'] = self.preprocessor.run(input)
 
         preprocessed_rgb = res['preprocess']["rgb_images"]
+        self.visualize(res['preprocess'], "rgb_images", "Smooth Image")
 
         res['geometry_1'] = self.geometry_1.run(preprocessed_rgb)
         # res['geometry_2'] = self.geometry_2.run(preprocessed_rgb)
