@@ -7,11 +7,11 @@ from functools import wraps
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Union, Optional, Tuple
 
-from .base_pipeline import *
-from .pipeline1 import *
-from .pipeline2 import *
-from .pipeline3 import *
-from .pipeline4 import *
+from base_pipeline import *
+from pipeline1 import *
+from pipeline2 import *
+from pipeline3 import *
+from pipeline4 import *
 
 
 class OverallSceneAnalysisPipeline(BasePipeline):
@@ -25,7 +25,6 @@ class OverallSceneAnalysisPipeline(BasePipeline):
         self.geometry_2 = PanoramaStitchingPipeline()
         self.detection = ObjectDetectionPipeline()
         self.segmentation = SegmentationPipeline()
-        self.viz = VisualizationPipeline()
 
         self.last_results = {}
 
@@ -37,20 +36,16 @@ class OverallSceneAnalysisPipeline(BasePipeline):
             @input: either image path, list of image paths or image tensor.
         """
         res = {}
-        # TODO
-        # res['preprocess'] = self.preprocessor.run(input)
-        # res['geometry_1'] = self.geometry_1.run(input)
-        # res['geometry_2'] = self.geometry_2.run(input)
-        # res['detection'] = self.detection.run(input)
-        # res['segmentation'] = self.segmentation.run(input)
-        
-        self.last_results = res
-        if visualize:
-            self.visualize_all()
-        return self.last_results
+        res['preprocess'] = self.preprocessor.run(input)
 
-    def visualize_all(self):
-        if self.last_results:
-            self.viz.run(self.last_results)
-        else:
-            print("Have no results to visualize.")       
+        preprocessed_rgb = res['preprocess']["rgb_images"]
+
+        res['geometry_1'] = self.geometry_1.run(preprocessed_rgb)
+        # res['geometry_2'] = self.geometry_2.run(preprocessed_rgb)
+        # res['detection'] = self.detection.run(preprocessed_rgb)
+        # res['segmentation'] = self.segmentation.run(preprocessed_rgb)       
+
+if __name__ == "__main__":
+    data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
+    pipeline = OverallSceneAnalysisPipeline()
+    pipeline.run([os.path.join(data_dir, dir) for dir in os.listdir(data_dir)])

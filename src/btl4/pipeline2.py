@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, Any, List, Union, Optional, Tuple
 
-from .base_pipeline import *
+from base_pipeline import *
 
 
 class PanoramaStitchingPipeline(BasePipeline):
@@ -21,5 +21,4 @@ class PanoramaStitchingPipeline(BasePipeline):
             @input: either image path, list of image paths or image tensor.
         """
         pass
-
 

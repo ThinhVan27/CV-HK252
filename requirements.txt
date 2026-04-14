@@ -4,3 +4,5 @@ scikit-learn
 pandas
 matplotlib
 seaborn
+gradio
+Pillow

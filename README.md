@@ -20,6 +20,22 @@ This repository includes four assignments in Digital Image Processing and Comput
 - Familiar with basic Machine Learning/ Deep Learning
 
 ## Quick Start
+### Run ImageForge Web UI (Gradio)
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Start the app:
+
+```bash
+python app.py
+```
+
+3. Open the local URL shown in terminal (usually http://127.0.0.1:7860).
+
 ## Project Structure
 ## License
 This project has implemented for academic purpose only.

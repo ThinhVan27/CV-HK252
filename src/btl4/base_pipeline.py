@@ -85,7 +85,7 @@ class BasePipeline(ABC):
             image = cv2.imread(input, cv2.IMREAD_COLOR)
             if image is None:
                 raise ValueError(f"Cannot read image from path: {input}")
-            return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            return [cv2.cvtColor(image, cv2.COLOR_BGR2RGB)]
 
         if isinstance(input, np.ndarray):
             return [self._ensure_rgb(input)]
@@ -105,6 +105,24 @@ class BasePipeline(ABC):
 
         raise TypeError("Unsupported input type")
     
+    def visualize(self, result, what, name):
+        n_imgs = len(result[what])
+        cols = min(3, n_imgs)
+        rows = (n_imgs + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(3*cols, 4*rows))
+        axes = axes.flatten()
+        for i, ax in enumerate(axes):
+            if i < n_imgs:
+                img = result[what][i]
+                if len(img.shape) == 2:
+                    ax.imshow(result[what][i], cmap="gray")
+                else:
+                    ax.imshow(result[what][i])
+            axes[i].axis("off")
+        fig.suptitle(name)
+        plt.tight_layout()
+        plt.show()
+    
     
 class DataPreprocessorPipeline(BasePipeline):
     """
@@ -115,12 +133,14 @@ class DataPreprocessorPipeline(BasePipeline):
         resize_to: Optional[Tuple[int, int]] = None,
         crop_to: Optional[Tuple[int, int]] = None,
         apply_sharpen: bool = False,
+        apply_smoothing: bool = False,
         gaussian_ksize: int = 5,
         gaussian_sigma: float = 0.0,
     ):
         self.resize_to = resize_to
         self.crop_to = crop_to
         self.apply_sharpen = apply_sharpen
+        self.apply_smoothing = apply_smoothing
         self.gaussian_ksize = gaussian_ksize
         self.gaussian_sigma = gaussian_sigma
 
@@ -141,7 +161,10 @@ class DataPreprocessorPipeline(BasePipeline):
             current = image
             current = self._resize(current)
             current = self._crop(current)
-            current = self._sharpening(current)
+            if self.apply_sharpen:
+                current = self._sharpening(current)
+            if self.apply_smoothing:
+                current = self._smoothing(current)
 
             processed_rgb.append(current)
             processed_gray.append(self.rgb2gray(current))
@@ -150,13 +173,6 @@ class DataPreprocessorPipeline(BasePipeline):
             "rgb_images": processed_rgb,
             "gray_images": processed_gray,
             "num_images": len(processed_rgb),
-            "settings": {
-                "resize_to": self.resize_to,
-                "crop_to": self.crop_to,
-                "apply_sharpen": self.apply_sharpen,
-                "gaussian_ksize": self.gaussian_ksize,
-                "gaussian_sigma": self.gaussian_sigma,
-            },
         }
 
         return result
@@ -187,6 +203,16 @@ class DataPreprocessorPipeline(BasePipeline):
         y2 = y1 + crop_h
         return image[y1:y2, x1:x2]
 
+    def _smoothing(self, image: np.ndarray) -> np.ndarray:
+        if not self.apply_smoothing:
+            return image
+        ksize = self.gaussian_ksize
+        if ksize <= 0:
+            raise ValueError("gaussian_ksize must be a positive odd integer")
+        if ksize % 2 == 0:
+            ksize += 1
+        return cv2.GaussianBlur(image, (ksize, ksize), sigmaX=self.gaussian_sigma)
+    
     def _sharpening(self, image: np.ndarray) -> np.ndarray:
         if not self.apply_sharpen:
             return image
@@ -201,192 +227,4 @@ class DataPreprocessorPipeline(BasePipeline):
         edges = cv2.subtract(image, smooth_image)
         sharpened = cv2.add(image, edges)
         
-        return np.clip(sharpened, 0, 255)
-
-
-class VisualizationPipeline(BasePipeline):
-    """
-    Visualization Pipeline.
-    """
-    def __init__(
-        self,
-        default_cols: int = 3,
-        max_images_per_pipeline: int = 12,
-        metadata_char_limit: int = 800,
-    ):
-        self.default_cols = max(1, default_cols)
-        self.max_images_per_pipeline = max(1, max_images_per_pipeline)
-        self.metadata_char_limit = max(100, metadata_char_limit)
-
-    def run(
-        self,
-        results: Dict[str, Dict[str, Any]],
-        cols: Optional[int] = None,
-        max_images_per_pipeline: Optional[int] = None,
-        assume_bgr: bool = False,
-    ) -> Dict[str, Dict[str, Any]]:
-        if not isinstance(results, dict) or not results:
-            raise ValueError("results must be a non-empty dict")
-
-        effective_cols = max(1, cols or self.default_cols)
-        effective_max_images = max(1, max_images_per_pipeline or self.max_images_per_pipeline)
-
-        summaries: Dict[str, Dict[str, Any]] = {}
-
-        for pipeline_name, pipeline_result in results.items():
-            images = self._collect_images(pipeline_result)
-            metadata = self._collect_metadata(pipeline_result)
-
-            shown_images = images[:effective_max_images]
-            self._plot_pipeline(
-                name=pipeline_name,
-                images=shown_images,
-                metadata=metadata,
-                cols=effective_cols,
-                assume_bgr=assume_bgr,
-            )
-
-            summaries[pipeline_name] = {
-                "num_images_found": len(images),
-                "num_images_shown": len(shown_images),
-                "metadata_keys": list(metadata.keys()),
-            }
-
-        plt.show()
-        return summaries
-
-    def _plot_pipeline(
-        self,
-        name: str,
-        images: List[Tuple[str, np.ndarray]],
-        metadata: Dict[str, Any],
-        cols: int,
-        assume_bgr: bool,
-    ) -> None:
-        n_images = len(images)
-        n_meta_panel = 1 if metadata else 0
-        total_panels = max(1, n_images + n_meta_panel)
-        rows = (total_panels + cols - 1) // cols
-
-        fig_w = 5 * cols
-        fig_h = 4 * rows
-        fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h))
-        axes = np.array(axes).reshape(-1)
-
-        for idx in range(n_images):
-            label, image = images[idx]
-            ax = axes[idx]
-            image_to_show = self._prepare_image_for_display(image, assume_bgr=assume_bgr)
-
-            if image_to_show.ndim == 2:
-                ax.imshow(image_to_show, cmap="gray")
-            else:
-                ax.imshow(image_to_show)
-
-            ax.set_title(label, fontsize=10)
-            ax.axis("off")
-
-        if metadata:
-            meta_ax = axes[n_images]
-            meta_ax.axis("off")
-            meta_ax.set_title("Metadata", fontsize=10)
-            meta_text = self._stringify_metadata(metadata)
-            meta_ax.text(0.0, 1.0, meta_text, va="top", ha="left", fontsize=9, wrap=True)
-
-        for idx in range(n_images + n_meta_panel, len(axes)):
-            axes[idx].axis("off")
-
-        fig.suptitle(f"{name} - Results Visualization", fontsize=13)
-        fig.tight_layout()
-
-    def _collect_images(self, data: Any, prefix: str = "") -> List[Tuple[str, np.ndarray]]:
-        images: List[Tuple[str, np.ndarray]] = []
-
-        if self._is_image_like(data):
-            label = prefix or "image"
-            images.append((label, data))
-            return images
-
-        if isinstance(data, dict):
-            for key, value in data.items():
-                next_prefix = f"{prefix}.{key}" if prefix else str(key)
-                images.extend(self._collect_images(value, next_prefix))
-            return images
-
-        if isinstance(data, (list, tuple)):
-            for idx, value in enumerate(data):
-                next_prefix = f"{prefix}[{idx}]" if prefix else f"item[{idx}]"
-                images.extend(self._collect_images(value, next_prefix))
-            return images
-
-        return images
-
-    def _collect_metadata(self, data: Any, prefix: str = "") -> Dict[str, Any]:
-        metadata: Dict[str, Any] = {}
-
-        if self._is_image_like(data):
-            return metadata
-
-        if isinstance(data, dict):
-            for key, value in data.items():
-                next_prefix = f"{prefix}.{key}" if prefix else str(key)
-                nested = self._collect_metadata(value, next_prefix)
-                metadata.update(nested)
-            return metadata
-
-        if isinstance(data, (list, tuple)):
-            if data and any(self._is_image_like(item) for item in data):
-                return metadata
-            for idx, value in enumerate(data):
-                next_prefix = f"{prefix}[{idx}]" if prefix else f"item[{idx}]"
-                nested = self._collect_metadata(value, next_prefix)
-                metadata.update(nested)
-            return metadata
-
-        key = prefix or "value"
-        if isinstance(data, np.generic):
-            metadata[key] = data.item()
-        else:
-            metadata[key] = data
-        return metadata
-
-    def _is_image_like(self, data: Any) -> bool:
-        if isinstance(data, np.ndarray):
-            return self._is_valid_image_shape(data)
-        return False
-
-    def _is_valid_image_shape(self, image: np.ndarray) -> bool:
-        if image.ndim == 2:
-            return True
-        if image.ndim == 3 and image.shape[2] in (1, 3):
-            return True
-        return False
-
-    def _prepare_image_for_display(self, image: np.ndarray, assume_bgr: bool = False) -> np.ndarray:
-        out = np.asarray(image)
-
-        if out.ndim == 3 and out.shape[2] == 1:
-            out = out[:, :, 0]
-
-        if assume_bgr and out.ndim == 3 and out.shape[2] == 3:
-            out = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
-
-        return out
-
-    def _stringify_metadata(self, metadata: Dict[str, Any]) -> str:
-        if not metadata:
-            return "No metadata"
-
-        lines: List[str] = []
-        for key, value in metadata.items():
-            text = repr(value)
-            if len(text) > 120:
-                text = text[:117] + "..."
-            lines.append(f"- {key}: {text}")
-
-        combined = "\n".join(lines)
-        if len(combined) > self.metadata_char_limit:
-            return combined[: self.metadata_char_limit - 3] + "..."
-        return combined
-
-
+        return np.clip(sharpened, 0, 255).astype(np.uint8)

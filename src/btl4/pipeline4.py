@@ -4,14 +4,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, Any, List, Union, Optional, Tuple
 
-from .base_pipeline import *
+from base_pipeline import *
 
  
 class SegmentationPipeline(BasePipeline):
     """
     Segmentation Pipeline
     """
-    
     @valid_input
     def run(self, input: Union[str, List[str], List[np.ndarray]]) -> Dict[str, Any]:
         """
@@ -21,5 +20,4 @@ class SegmentationPipeline(BasePipeline):
             @input: either image path, list of image paths or image tensor.
         """
         pass
-
 

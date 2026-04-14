@@ -420,12 +420,29 @@ class Pipeline:
 
 if __name__ == "__main__":
 
-    v = BlendingVisitor()
-    blending = PoissonBlending()
-    config = {"extractor": SIFT(), "blending": blending}
-    pl = Pipeline(config)
+    # Load your images into a list
     root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    root = os.path.join(root, "img", "btl3")
-    result = pl.run(os.path.join(root, "Desk"), ["image1.jpg","image2.jpg", "image3.jpg"])
-    print(f"Num keypoints left: {result.get("kp_train", 0)} | Num keypoints right: {result.get("kp_query", 0)} | Num matches: {result.get("n_matches", 0)}")
-    # print(blending.accept(v))
+    root = os.path.join(root, "img", "btl3", "BK")
+    images = [cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB) for path in [os.path.join(root, name) for name in sorted(os.listdir(root))]]
+
+    # Create the stitcher object
+    stitcher = cv2.Stitcher_create()
+
+    # Stitch the images
+    status, panorama = stitcher.stitch(images)
+    if status == cv2.STITCHER_OK:
+        plt.imshow(panorama)
+        plt.show()
+    else:
+        print(f"Stitching failed with status code {status}")
+
+
+    # v = BlendingVisitor()
+    # blending = PoissonBlending()
+    # config = {"extractor": SIFT(), "blending": blending}
+    # pl = Pipeline(config)
+    # root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    # root = os.path.join(root, "img", "btl3")
+    # result = pl.run(os.path.join(root, "Desk"), ["image1.jpg","image2.jpg", "image3.jpg"])
+    # print(f"Num keypoints left: {result.get("kp_train", 0)} | Num keypoints right: {result.get("kp_query", 0)} | Num matches: {result.get("n_matches", 0)}")
+    # # print(blending.accept(v))
