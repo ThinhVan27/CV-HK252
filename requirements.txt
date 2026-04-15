@@ -6,3 +6,10 @@ matplotlib
 seaborn
 gradio
 Pillow
+numpy
+opencv-python
+matplotlib
+scikit-learn
+ultralytics
+torch
+torchvision

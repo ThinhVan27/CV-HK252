@@ -41,6 +41,7 @@ class OverallSceneAnalysisPipeline(BasePipeline):
         visualize: bool = True,
         run_geometry_1: bool = True,
         run_segmentation: bool = False,
+        run_detection: bool = False,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Run all pipeline and return each pipeline's result.
@@ -61,9 +62,8 @@ class OverallSceneAnalysisPipeline(BasePipeline):
         if run_segmentation:
             res['segmentation'] = self.segmentation.run(preprocessed_rgb, visualize=visualize)
 
-        # res['geometry_2'] = self.geometry_2.run(preprocessed_rgb)
-        # res['detection'] = self.detection.run(preprocessed_rgb)
-        # detection and panorama pipelines are not fully implemented yet.
+        if run_detection:
+            res['detection'] = self.detection.run(preprocessed_rgb, visualize=visualize)
 
         self.last_results = res
         return res
