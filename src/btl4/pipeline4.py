@@ -87,6 +87,7 @@ class RegionGrowingSegmenter(Segmenter):
         }
 
 
+
 class SplitMergeSegmenter(Segmenter):
     """Quadtree-like split and region-adjacency merge on grayscale image."""
 
@@ -273,22 +274,22 @@ class KMeansSegmenter(Segmenter):
         }
 
 
-class SAMSegmenter(Segmenter):
-    """Segmentation with Ultralytics SAM."""
+class YOLO26Segmenter(Segmenter):
+    """Segmentation with Ultralytics YOLO26 segmentation models."""
 
-    def __init__(self, model_name: str = "sam_b.pt"):
+    def __init__(self, model_name: str = "yolo26n-seg.pt"):
         self.model_name = model_name
         self._model = None
 
     def _load_model(self):
         if self._model is None:
             try:
-                from ultralytics import SAM
+                from ultralytics import YOLO
             except Exception as exc:
                 raise ImportError(
-                    "Ultralytics SAM is not installed. Install with `pip install ultralytics`."
+                    "Ultralytics YOLO is not installed. Install with `pip install ultralytics`."
                 ) from exc
-            self._model = SAM(self.model_name)
+            self._model = YOLO(self.model_name)
 
     def extract(self, input: np.ndarray) -> Dict[str, Any]:
         if input.ndim != 3:
@@ -297,8 +298,8 @@ class SAMSegmenter(Segmenter):
             rgb = input
 
         self._load_model()
-        results = self._model(rgb)
-        if not results or getattr(results[0], "masks", None) is None:
+        results = self._model.predict(source=rgb, verbose=False)
+        if not results:
             h, w = rgb.shape[:2]
             empty_labels = np.zeros((h, w), dtype=np.int32)
             return {
@@ -308,15 +309,54 @@ class SAMSegmenter(Segmenter):
                 "num_segments": 0,
             }
 
-        masks = results[0].masks.data.cpu().numpy().astype(bool)
         h, w = rgb.shape[:2]
+        result0 = results[0]
         labels = np.zeros((h, w), dtype=np.int32)
 
-        areas = masks.reshape(masks.shape[0], -1).sum(axis=1)
-        order = np.argsort(-areas)
+        # Prefer segmentation masks when the selected YOLO model provides them.
+        if getattr(result0, "masks", None) is not None:
+            raw_masks = result0.masks.data.cpu().numpy()
 
-        for seg_id, idx in enumerate(order, start=1):
-            labels[masks[idx]] = seg_id
+            resized_masks: List[np.ndarray] = []
+            for raw_mask in raw_masks:
+                mask_2d = np.squeeze(raw_mask)
+                if mask_2d.ndim != 2:
+                    continue
+
+                if mask_2d.shape != (h, w):
+                    resized = cv2.resize(mask_2d.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR)
+                    mask_bool = resized > 0.5
+                else:
+                    mask_bool = mask_2d > 0.5
+
+                if mask_bool.shape != (h, w):
+                    mask_bool = cv2.resize(mask_bool.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(bool)
+
+                if mask_bool.shape == (h, w) and np.any(mask_bool):
+                    resized_masks.append(mask_bool)
+
+            if resized_masks:
+                masks = np.stack(resized_masks, axis=0)
+                areas = masks.reshape(masks.shape[0], -1).sum(axis=1)
+                order = np.argsort(-areas)
+
+                for seg_id, idx in enumerate(order, start=1):
+                    labels[masks[idx]] = seg_id
+        elif getattr(result0, "boxes", None) is not None and len(result0.boxes) > 0:
+            boxes = result0.boxes.xyxy.cpu().numpy().astype(np.int32)
+            for seg_id, (x1, y1, x2, y2) in enumerate(boxes, start=1):
+                x1 = int(np.clip(x1, 0, w - 1))
+                y1 = int(np.clip(y1, 0, h - 1))
+                x2 = int(np.clip(x2, 0, w - 1))
+                y2 = int(np.clip(y2, 0, h - 1))
+                labels[y1:y2 + 1, x1:x2 + 1] = seg_id
+        else:
+            return {
+                "mask": labels.astype(np.uint8),
+                "labels": labels,
+                "segments_image": rgb.copy(),
+                "num_segments": 0,
+            }
 
         n_seg = int(labels.max())
         rng = np.random.default_rng(123)
@@ -341,7 +381,7 @@ class SegmentationPipeline(BasePipeline):
 
     def __init__(
         self,
-        method: str = "kmeans",
+        method: Union[str, List[str], Tuple[str, ...]] = "kmeans",
         region_growing_threshold: int = 5,
         region_connectivity: int = 4,
         split_std_threshold: float = 8.0,
@@ -350,22 +390,69 @@ class SegmentationPipeline(BasePipeline):
         kmeans_k: int = 5,
         kmeans_use_position: bool = False,
         kmeans_normalize: bool = True,
-        sam_model_name: str = "sam_b.pt",
+        yolo26_model_name: str = "yolo26n-seg.pt",
         segmenter: Optional[Segmenter] = None,
+        segmenters: Optional[Dict[str, Segmenter]] = None,
     ):
-        self.method = method.strip().lower()
-        self.segmenter = segmenter or self._build_segmenter(
-            method=self.method,
-            region_growing_threshold=region_growing_threshold,
-            region_connectivity=region_connectivity,
-            split_std_threshold=split_std_threshold,
-            merge_mean_threshold=merge_mean_threshold,
-            split_min_region_size=split_min_region_size,
-            kmeans_k=kmeans_k,
-            kmeans_use_position=kmeans_use_position,
-            kmeans_normalize=kmeans_normalize,
-            sam_model_name=sam_model_name,
-        )
+        if segmenter is not None and segmenters is not None:
+            raise ValueError("Use either `segmenter` or `segmenters`, not both")
+
+        if segmenters is not None:
+            normalized_segmenters: Dict[str, Segmenter] = {}
+            for key, value in segmenters.items():
+                if not isinstance(key, str) or not key.strip():
+                    continue
+                normalized_segmenters[key.strip().lower()] = value
+
+            if not normalized_segmenters:
+                raise ValueError("`segmenters` must contain at least one valid method-segmenter pair")
+
+            self.methods = list(normalized_segmenters.keys())
+            self.method = self.methods[0]
+            self.segmenters = normalized_segmenters
+            return
+
+        self.methods = self._normalize_methods(method)
+        self.method = self.methods[0]
+
+        if segmenter is not None:
+            if len(self.methods) != 1:
+                raise ValueError("When `segmenter` is provided, `method` must contain exactly one method")
+            self.segmenters: Dict[str, Segmenter] = {self.method: segmenter}
+        else:
+            self.segmenters = {
+                m: self._build_segmenter(
+                    method=m,
+                    region_growing_threshold=region_growing_threshold,
+                    region_connectivity=region_connectivity,
+                    split_std_threshold=split_std_threshold,
+                    merge_mean_threshold=merge_mean_threshold,
+                    split_min_region_size=split_min_region_size,
+                    kmeans_k=kmeans_k,
+                    kmeans_use_position=kmeans_use_position,
+                    kmeans_normalize=kmeans_normalize,
+                    yolo26_model_name=yolo26_model_name,
+                )
+                for m in self.methods
+            }
+
+    @staticmethod
+    def _normalize_methods(method: Union[str, List[str], Tuple[str, ...]]) -> List[str]:
+        if isinstance(method, str):
+            normalized = method.strip().lower()
+            if normalized == "all":
+                return ["region_growing", "split_merge", "kmeans"]
+            if not normalized:
+                raise ValueError("`method` cannot be empty")
+            return [normalized]
+
+        if isinstance(method, (list, tuple)):
+            methods = [m.strip().lower() for m in method if isinstance(m, str) and m.strip()]
+            if not methods:
+                raise ValueError("`method` list is empty")
+            return methods
+
+        raise TypeError("`method` must be a string, list of strings, or tuple of strings")
 
     @staticmethod
     def _build_segmenter(
@@ -378,7 +465,7 @@ class SegmentationPipeline(BasePipeline):
         kmeans_k: int,
         kmeans_use_position: bool,
         kmeans_normalize: bool,
-        sam_model_name: str,
+        yolo26_model_name: str,
     ) -> Segmenter:
         if method == "region_growing":
             return RegionGrowingSegmenter(
@@ -397,27 +484,23 @@ class SegmentationPipeline(BasePipeline):
                 use_position=kmeans_use_position,
                 normalize=kmeans_normalize,
             )
-        if method == "sam":
-            return SAMSegmenter(model_name=sam_model_name)
-        raise ValueError("Unknown segmentation method. Use one of: region_growing, split_merge, kmeans, sam")
+        if method == "yolo26":
+            return YOLO26Segmenter(model_name=yolo26_model_name)
+        raise ValueError("Unknown segmentation method. Use one of: region_growing, split_merge, kmeans, yolo26")
 
-    @valid_input
-    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray], visualize: bool = False) -> Dict[str, Any]:
-        """
-        Run `SegmentationPipeline`.
-        
-        Args:
-            @input: either image path, list of image paths or image tensor.
-        """
-        rgb_images = self._read_input(input)
-
+    def _run_single_method(
+        self,
+        rgb_images: List[np.ndarray],
+        method: str,
+        segmenter: Segmenter,
+    ) -> Dict[str, Any]:
         masks_images: List[np.ndarray] = []
         labels_images: List[np.ndarray] = []
         segments_images: List[np.ndarray] = []
         metrics: List[Dict[str, Any]] = []
 
         for rgb in rgb_images:
-            out = self.segmenter.extract(rgb)
+            out = segmenter.extract(rgb)
             mask = out["mask"].astype(np.uint8)
             labels = out["labels"].astype(np.int32)
             seg_img = out["segments_image"].astype(np.uint8)
@@ -433,8 +516,8 @@ class SegmentationPipeline(BasePipeline):
                 }
             )
 
-        result: Dict[str, Any] = {
-            "method": self.method,
+        return {
+            "method": method,
             "rgb_images": rgb_images,
             "masks_images": masks_images,
             "labels_images": labels_images,
@@ -443,21 +526,76 @@ class SegmentationPipeline(BasePipeline):
             "num_images": len(rgb_images),
         }
 
+    def _visualize_multi_method(self, rgb_images: List[np.ndarray], multi_result: Dict[str, Dict[str, Any]]) -> None:
+        methods = list(multi_result.keys())
+        n_images = len(rgb_images)
+        n_cols = len(methods) + 1
+
+        fig_overlay, axes_overlay = plt.subplots(n_images, n_cols, figsize=(4 * n_cols, 3.5 * n_images))
+        axes_overlay = np.array(axes_overlay, ndmin=2).reshape(n_images, n_cols)
+
+        for i in range(n_images):
+            axes_overlay[i, 0].imshow(rgb_images[i])
+            axes_overlay[i, 0].set_title("Input")
+            axes_overlay[i, 0].axis("off")
+
+            for j, method in enumerate(methods, start=1):
+                axes_overlay[i, j].imshow(multi_result[method]["segments_images"][i])
+                axes_overlay[i, j].set_title(f"{method}")
+                axes_overlay[i, j].axis("off")
+
+        fig_overlay.suptitle("Segmentation Overlay Comparison")
+        plt.tight_layout()
+        plt.show()
+
+        fig_mask, axes_mask = plt.subplots(n_images, len(methods), figsize=(4 * len(methods), 3.5 * n_images))
+        axes_mask = np.array(axes_mask, ndmin=2).reshape(n_images, len(methods))
+
+        for i in range(n_images):
+            for j, method in enumerate(methods):
+                axes_mask[i, j].imshow(multi_result[method]["masks_images"][i], cmap="gray")
+                axes_mask[i, j].set_title(f"Mask: {method}")
+                axes_mask[i, j].axis("off")
+
+        fig_mask.suptitle("Segmentation Mask Comparison")
+        plt.tight_layout()
+        plt.show()
+
+    @valid_input
+    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray], visualize: bool = False) -> Dict[str, Any]:
+        """
+        Run `SegmentationPipeline`.
+        
+        Args:
+            @input: either image path, list of image paths or image tensor.
+        """
+        rgb_images = self._read_input(input)
+
+        if len(self.methods) == 1:
+            method = self.methods[0]
+            result = self._run_single_method(rgb_images, method=method, segmenter=self.segmenters[method])
+
+            if visualize:
+                self.visualize(result, "masks_images", f"Segmentation Masks ({method})")
+                self.visualize(result, "segments_images", f"Segmentation Overlay ({method})")
+
+            return result
+
+        multi_result: Dict[str, Dict[str, Any]] = {}
+        for method in self.methods:
+            multi_result[method] = self._run_single_method(
+                rgb_images,
+                method=method,
+                segmenter=self.segmenters[method],
+            )
+
         if visualize:
-            self.visualize(result, "masks_images", f"Segmentation Masks ({self.method})")
-            self.visualize(result, "segments_images", f"Segmentation Overlay ({self.method})")
+            self._visualize_multi_method(rgb_images, multi_result)
 
-        return result
+        return {
+            "methods": self.methods,
+            "num_images": len(rgb_images),
+            "results": multi_result,
+        }
 
-
-def main():
-    data_dir = os.path.abspath(r"img\btl4\Segment")
-    image_paths = [os.path.join(data_dir, file_name) for file_name in os.listdir(data_dir)]
-
-    pipeline = SegmentationPipeline(method="kmeans", kmeans_k=5, kmeans_use_position=True)
-    pipeline.run(image_paths[:3], visualize=True)
-
-
-if __name__ == "__main__":
-    main()
 
