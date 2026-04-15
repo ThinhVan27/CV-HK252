@@ -451,7 +451,7 @@ class SegmentationPipeline(BasePipeline):
 
 
 def main():
-    data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
+    data_dir = os.path.abspath(r"img\btl4\Segment")
     image_paths = [os.path.join(data_dir, file_name) for file_name in os.listdir(data_dir)]
 
     pipeline = SegmentationPipeline(method="kmeans", kmeans_k=5, kmeans_use_position=True)
