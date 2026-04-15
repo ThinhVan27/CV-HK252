@@ -532,7 +532,9 @@ class PanoramaStitchingPipeline(BasePipeline):
             end = time.time()
             result["time(s)"] = float(end - start)
             if is_visual:
-                PanoramaStitchingPipeline.visualize(result["result"])
+                PanoramaStitchingPipeline.visualize(
+                    result["result"], str(self.extractor)
+                )
             return result
 
         except Exception as e:
@@ -722,11 +724,11 @@ class PanoramaStitchingPipeline(BasePipeline):
             )
 
     @staticmethod
-    def visualize(image, name=None):
+    def visualize(image, name):
         plt.axis(False)
         plt.tight_layout()
         plt.imshow(image)
-        plt.title("Image Stitching" if not name else name)
+        plt.title("Image Stitching with " + name)
         plt.show()
 
 
