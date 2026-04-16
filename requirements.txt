@@ -13,3 +13,4 @@ scikit-learn
 ultralytics
 torch
 torchvision
+onnxruntime==1.23.2

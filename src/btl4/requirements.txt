@@ -4,3 +4,4 @@ matplotlib>=3.8
 ultralytics>=8.3
 torch>=2.2
 torchvision>=0.17
+onnxruntime==1.23.2
