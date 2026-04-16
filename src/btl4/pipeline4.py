@@ -599,3 +599,133 @@ class SegmentationPipeline(BasePipeline):
         }
 
 
+def _to_binary_mask(mask: np.ndarray) -> np.ndarray:
+    """Convert any mask format to a binary uint8 mask in {0, 1}."""
+    if mask is None:
+        raise ValueError("Mask is None")
+
+    arr = np.asarray(mask)
+    if arr.ndim == 3:
+        if arr.shape[2] == 1:
+            arr = arr[:, :, 0]
+        else:
+            # Ground-truth may be RGB-encoded; use grayscale thresholding.
+            arr = cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_BGR2GRAY)
+
+    return (arr > 0).astype(np.uint8)
+
+
+def _compute_binary_iou(pred_binary: np.ndarray, gt_binary: np.ndarray) -> float:
+    """Compute IoU for binary masks (value domain {0, 1})."""
+    pred_bool = pred_binary.astype(bool)
+    gt_bool = gt_binary.astype(bool)
+
+    intersection = np.logical_and(pred_bool, gt_bool).sum()
+    union = np.logical_or(pred_bool, gt_bool).sum()
+
+    if union == 0:
+        return 1.0
+    return float(intersection) / float(union)
+
+
+def _build_gt_index(mask_dir: str) -> Dict[str, str]:
+    """Index ground-truth mask paths by filename stem for quick matching."""
+    if not os.path.isdir(mask_dir):
+        raise FileNotFoundError(f"Ground-truth mask directory not found: {mask_dir}")
+
+    valid_ext = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+    gt_index: Dict[str, str] = {}
+
+    for name in os.listdir(mask_dir):
+        path = os.path.join(mask_dir, name)
+        if not os.path.isfile(path):
+            continue
+
+        stem, ext = os.path.splitext(name)
+        if ext.lower() not in valid_ext:
+            continue
+
+        # Keep first occurrence if duplicates exist.
+        gt_index.setdefault(stem.lower(), path)
+
+    return gt_index
+
+
+def evaluate_segmentation_iou(
+    seg_compare_result: Dict[str, Any],
+    image_paths: List[str],
+    gt_mask_dir: str,
+) -> Dict[str, Any]:
+    """
+    Evaluate IoU between predicted segmentation masks and ground-truth masks.
+
+    Notes:
+    - Ground-truth in `gt_mask_dir` is treated as non-instance binary mask (`pixel > 0`).
+    - Predicted masks are also converted to binary (`pixel > 0`). For YOLO-based
+      segmentation this effectively merges all detected instances into one foreground.
+    - Masks are matched by filename stem between input image path and gt mask path.
+    """
+    if "results" not in seg_compare_result:
+        raise ValueError("`seg_compare_result` must contain key 'results'.")
+
+    gt_index = _build_gt_index(gt_mask_dir)
+
+    per_method: Dict[str, Any] = {}
+    missing_gt: List[str] = []
+
+    for method_name, method_result in seg_compare_result["results"].items():
+        pred_masks = method_result.get("masks_images", [])
+        n = min(len(pred_masks), len(image_paths))
+
+        ious: List[float] = []
+        per_image: List[Dict[str, Any]] = []
+
+        for i in range(n):
+            image_path = image_paths[i]
+            image_name = os.path.basename(image_path)
+            stem = os.path.splitext(image_name)[0].lower()
+
+            gt_path = gt_index.get(stem)
+            if gt_path is None:
+                missing_gt.append(image_name)
+                continue
+
+            gt_raw = cv2.imread(gt_path, cv2.IMREAD_UNCHANGED)
+            if gt_raw is None:
+                missing_gt.append(image_name)
+                continue
+
+            gt_binary = _to_binary_mask(gt_raw)
+            pred_binary = _to_binary_mask(pred_masks[i])
+
+            if pred_binary.shape != gt_binary.shape:
+                pred_binary = cv2.resize(
+                    pred_binary.astype(np.uint8),
+                    (gt_binary.shape[1], gt_binary.shape[0]),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+                pred_binary = (pred_binary > 0).astype(np.uint8)
+
+            iou = _compute_binary_iou(pred_binary, gt_binary)
+            ious.append(iou)
+            per_image.append(
+                {
+                    "image": image_name,
+                    "iou": iou,
+                }
+            )
+
+        per_method[method_name] = {
+            "mean_iou": float(np.mean(ious)) if ious else 0.0,
+            "ious": ious,
+            "per_image": per_image,
+            "evaluated_count": len(ious),
+        }
+
+    return {
+        "per_method": per_method,
+        "missing_ground_truth": sorted(set(missing_gt)),
+        "gt_mask_dir": gt_mask_dir,
+    }
+
+

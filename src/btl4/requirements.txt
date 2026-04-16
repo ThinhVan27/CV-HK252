@@ -1,5 +1,6 @@
-numpy
-opencv-python
-matplotlib
-scikit-learn
-ultralytics
+numpy>=1.26
+opencv-python>=4.10
+matplotlib>=3.8
+ultralytics>=8.3
+torch>=2.2
+torchvision>=0.17
