@@ -1,4 +1,6 @@
 import os
+import sys
+import importlib
 
 from typing import Dict, Any, List, Union, Optional, TypedDict
 
@@ -17,12 +19,22 @@ from abc import ABC, abstractmethod
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from src.btl3.evaluation import evaluate_from_matches
+try:
+    from src.btl3.evaluation import evaluate_from_matches
+except ImportError:
+    try:
+        from btl3.evaluation import evaluate_from_matches
+    except ImportError:
+        src_root = os.path.dirname(os.path.dirname(__file__))
+        if src_root not in sys.path:
+            sys.path.append(src_root)
+        from btl3.evaluation import evaluate_from_matches
 import pandas as pd
 import time
 
 try:
-    import onnxruntime as ort
+    ort_spec = importlib.util.find_spec("onnxruntime")
+    ort = importlib.import_module("onnxruntime") if ort_spec is not None else None
 except Exception:
     ort = None
 
@@ -324,6 +336,63 @@ class BlendingBase(ABC):
         min_col, max_col = min(cols), max(cols) + 1
         final_result = result[min_row:max_row, min_col:max_col, :]
         return np.clip(final_result, 0, 255).astype(np.uint8)
+
+
+class AlphaBlending(BlendingBase):
+    
+    def accept(self, visitor):
+        return visitor.visitAlpha(self)
+    
+    def blend(self, train_image, query_image, homo_matrix):
+        # return self.blend_(train_image, query_image, homo_matrix)
+        height_img1 = train_image.shape[0]
+        width_img1 = train_image.shape[1]
+        width_img2 = query_image.shape[1]
+        height_panorama = height_img1
+        width_panorama = width_img1 + width_img2
+        panorama1 = np.zeros((height_panorama, width_panorama, 3), dtype=np.float32)
+        mask1 = self._create_mask(train_image, query_image, version="left")
+        panorama1[:, : width_img1, :] = (
+            train_image.astype(np.float32)
+        )
+        cache_panorama1 = panorama1.copy()
+        panorama1 *= mask1
+        mask2 = self._create_mask(train_image, query_image, version="right")
+        panorama2 = cv2.warpPerspective(
+                query_image, homo_matrix, (width_panorama, height_panorama)
+            ).astype(np.float32)
+        cache_panorama2 = panorama2.copy()
+        panorama2 *= mask2
+        self.panorama = (cache_panorama1, cache_panorama2)
+        result = panorama1 + panorama2
+        return self._post_processing(result)
+
+    def _create_mask(self, train_image, query_image, version="left"):
+        height_train_img, width_train_img = train_image.shape[:2]
+        width_query_img = query_image.shape[1]
+        height_panorama = height_train_img
+        width_panorama = width_query_img + width_train_img
+        smoothing_window_percent = 0.3
+        smoothing_window_size = max(
+            100, min(smoothing_window_percent * min(width_query_img, width_train_img), 1000)
+        )
+        offset = int(smoothing_window_size / 2)
+        barrier = train_image.shape[1] - offset
+        mask = np.zeros((height_panorama, width_panorama), dtype=np.float32)
+        if version == "left":
+            mask[:, barrier - offset : barrier + offset] = np.tile(
+                np.linspace(1, 0, 2 * offset).T, (height_panorama, 1)
+            )
+            mask[:, : barrier - offset] = 1
+        else:
+            mask[:, barrier - offset : barrier + offset] = np.tile(
+                np.linspace(0, 1, 2 * offset).T, (height_panorama, 1)
+            )
+            mask[:, barrier + offset :] = 1
+        return cv2.merge([mask, mask, mask])
+
+    def __str__(self):
+        return "Alpha Blending"
 
 
 class PoissonBlending(BlendingBase):

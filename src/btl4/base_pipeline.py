@@ -106,21 +106,63 @@ class BasePipeline(ABC):
         raise TypeError("Unsupported input type")
     
     def visualize(self, result, what, name):
-        n_imgs = len(result[what])
-        cols = min(3, n_imgs)
-        rows = (n_imgs + cols - 1) // cols
-        fig, axes = plt.subplots(rows, cols, figsize=(3*cols, 4*rows))
-        axes = axes.flatten()
-        for i, ax in enumerate(axes):
-            if i < n_imgs:
-                img = result[what][i]
-                if len(img.shape) == 2:
-                    ax.imshow(result[what][i], cmap="gray")
+        result_keys = [what] if isinstance(what, str) else list(what)
+        if not result_keys:
+            raise ValueError("'what' must contain at least one result key")
+
+        for key in result_keys:
+            if key not in result:
+                raise KeyError(f"Missing key in result: {key}")
+
+        n_imgs = len(result[result_keys[0]])
+        for key in result_keys[1:]:
+            if len(result[key]) != n_imgs:
+                raise ValueError("All result image lists must have the same length")
+
+        include_input = "rgb_images" in result and len(result["rgb_images"]) == n_imgs
+        n_cols = len(result_keys) + (1 if include_input else 0)
+
+        fig, axes = plt.subplots(n_imgs, n_cols, figsize=(4 * n_cols, 3 * n_imgs))
+
+        if n_imgs == 1 and n_cols == 1:
+            axes = np.array([[axes]])
+        elif n_imgs == 1:
+            axes = np.array([axes])
+        elif n_cols == 1:
+            axes = np.array([[ax] for ax in axes])
+
+        titles = (["Input"] if include_input else []) + result_keys
+
+        for row in range(n_imgs):
+            col = 0
+            if include_input:
+                input_img = result["rgb_images"][row]
+                if input_img.ndim == 2:
+                    axes[row, col].imshow(input_img, cmap="gray")
                 else:
-                    ax.imshow(result[what][i])
-            axes[i].axis("off")
-        fig.suptitle(name)
-        plt.tight_layout()
+                    axes[row, col].imshow(input_img)
+                axes[row, col].axis("off")
+                col += 1
+
+            for key in result_keys:
+                img = result[key][row]
+                if img.ndim == 2:
+                    axes[row, col].imshow(img, cmap="gray")
+                else:
+                    axes[row, col].imshow(img)
+                axes[row, col].axis("off")
+                col += 1
+
+        for col, title in enumerate(titles):
+            axes[0, col].set_title(title)
+
+        if name:
+            fig.suptitle(name)
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+        else:
+            plt.tight_layout()
+        # Increase spacing between rows for clearer side-by-side comparisons.
+        fig.subplots_adjust(hspace=max(0.0, 0.15))
         plt.show()
     
     
@@ -136,6 +178,7 @@ class DataPreprocessorPipeline(BasePipeline):
         apply_smoothing: bool = False,
         gaussian_ksize: int = 5,
         gaussian_sigma: float = 0.0,
+        gray: bool = False
     ):
         self.resize_to = resize_to
         self.crop_to = crop_to
@@ -143,9 +186,10 @@ class DataPreprocessorPipeline(BasePipeline):
         self.apply_smoothing = apply_smoothing
         self.gaussian_ksize = gaussian_ksize
         self.gaussian_sigma = gaussian_sigma
+        self.gray = gray
 
     @valid_input
-    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray]) -> Dict[str, Any]:
+    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray], visualize=True) -> Dict[str, Any]:
         """
         Run DataPreprocessorPipeline.
         
@@ -153,28 +197,44 @@ class DataPreprocessorPipeline(BasePipeline):
             @input: either image path, list of image paths or image tensor.
         """
         images = self._read_input(input)
-
+        
+        
         processed_rgb = []
-        processed_gray = []
+        gray_imgs = []
+        crop_imgs = []
+        resized_imgs = []
+        sharpened_imgs = []
+        smooth_imgs = []
 
         for image in images:
-            current = image
-            current = self._resize(current)
-            current = self._crop(current)
-            if self.apply_sharpen:
-                current = self._sharpening(current)
-            if self.apply_smoothing:
-                current = self._smoothing(current)
+            img = image.copy()
+            if self.gray:
+                gray_img = self.rgb2gray(img)
+            else:
+                gray_img = img
+            crop_img = self._crop(gray_img)
+            resized_img = self._resize(crop_img)
+            sharpened_img = self._sharpening(resized_img)
+            smooth_img = self._smoothing(resized_img)
 
-            processed_rgb.append(current)
-            processed_gray.append(self.rgb2gray(current))
+            gray_imgs.append(gray_img)
+            crop_imgs.append(crop_img)
+            resized_imgs.append(resized_img)
+            sharpened_imgs.append(sharpened_img)
+            processed_rgb.append(smooth_img)
 
         result = {
-            "rgb_images": processed_rgb,
-            "gray_images": processed_gray,
+            "rgb_images": images,
+            "gray_imgs": [self.rgb2gray(img) for img in images],
+            "crop_imgs": crop_imgs,
+            "resized_imgs": resized_imgs,
+            "sharpened_imgs": sharpened_imgs,
+            "smooth_imgs": processed_rgb,
+            "preprocessed_imgs": processed_rgb,
             "num_images": len(processed_rgb),
         }
-
+        if visualize:
+            self.visualize(result, ["gray_imgs", "crop_imgs", "resized_imgs", "sharpened_imgs", "smooth_imgs"], "Data Preprocessing Results")
         return result
 
     def _resize(self, image: np.ndarray) -> np.ndarray:
@@ -229,3 +289,14 @@ class DataPreprocessorPipeline(BasePipeline):
         sharpened = cv2.add(image, edges)
         
         return np.clip(sharpened, 0, 255).astype(np.uint8)
+    
+def main():
+    pipeline = DataPreprocessorPipeline(crop_to=(500,400),
+                                        resize_to=(800, 700),
+                                        apply_sharpen=True,
+                                        apply_smoothing=True)
+    data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
+    pipeline.run([os.path.join(data_dir, dir) for dir in os.listdir(data_dir)], visualize=True)
+
+if __name__ == "__main__":
+    main()

@@ -245,7 +245,7 @@ class ObjectDetectionPipeline(BasePipeline):
         return img_copy
 
     @valid_input
-    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray], visualize: bool = False) -> Dict[str, Any]:
+    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray], visualize: bool = False ,hog=True) -> Dict[str, Any]:
         rgb_images = self._read_input(input)
 
         hog_results = []
@@ -256,14 +256,23 @@ class ObjectDetectionPipeline(BasePipeline):
             hog_out = self._detect_hog(img)
             yolo_out = self._detect_yolo(img)
 
-            img_with_hog = self._draw_detections(img, hog_out["boxes"], (0, 255, 0), "HOG+SVM", hog_out["scores"])
-            img_with_both = self._draw_detections(
-                img_with_hog,
-                yolo_out["boxes"],
-                (255, 0, 0),
-                "YOLOv8",
-                yolo_out["scores"],
-            )
+            if hog:
+                img_with_hog = self._draw_detections(img, hog_out["boxes"], (0, 255, 0), "HOG+SVM", hog_out["scores"])
+                img_with_both = self._draw_detections(
+                    img_with_hog,
+                    yolo_out["boxes"],
+                    (255, 0, 0),
+                    "YOLOv8",
+                    yolo_out["scores"],
+                )
+            else:
+                img_with_both = self._draw_detections(
+                    img,
+                    yolo_out["boxes"],
+                    (255, 0, 0),
+                    "YOLOv8",
+                    yolo_out["scores"],
+                )
 
             hog_results.append(hog_out)
             yolo_results.append(yolo_out)

@@ -58,15 +58,22 @@ class SobelFilter(EdgeDetector):
     def __init__(self, 
                  ksize: int = 3, 
                  threshold: int = 20,
-                 order: Literal["x", "y"] = "x"):
+                 dx: int = 1,
+                 dy: int = 1):
         if ksize <= 0:
             raise ValueError("ksize must be > 0")
         self.ksize = int(ksize if ksize % 2 == 1 else ksize + 1)
         self.threshold = int(max(0, threshold))
-        self.dx = 1 if order == "x" else 0
+        self.dx = dx
+        self.dy = dy
 
     def extract(self, input: np.ndarray) -> Dict[str, Any]:
-        lap = cv2.Sobel(input, cv2.CV_64F, dx=self.dx, dy=1 - self.dx, ksize=self.ksize)
+        if self.dx + self.dy == 2:
+            gradX = cv2.Sobel(input, cv2.CV_64F, dx=1, dy=0, ksize=self.ksize)
+            gradY = cv2.Sobel(input, cv2.CV_64F, dx=0, dy=1, ksize=self.ksize)
+            lap = np.sqrt(gradX*gradX + gradY * gradY + 1e-10)
+        else:
+            lap = cv2.Sobel(input, cv2.CV_64F, dx=self.dx, dy=self.dy, ksize=self.ksize)
         lap_abs = cv2.convertScaleAbs(lap)
         _, edges = cv2.threshold(lap_abs, self.threshold, 255, cv2.THRESH_BINARY)
         return {
@@ -125,7 +132,7 @@ class HarrisAlgo(CornerDetector):
     def extract(self, input: np.ndarray) -> Dict[str, Any]:
         gray_f = np.float32(input)
         response = cv2.cornerHarris(gray_f, self.block_size, self.ksize, self.k)
-        response = cv2.dilate(response, None)
+        response = cv2.erode(response, None)
         threshold = self.threshold_ratio * float(response.max()) if response.size else 0.0
         points = np.argwhere(response > threshold)
         # np.argwhere returns [y, x], convert to [x, y]
@@ -135,7 +142,6 @@ class HarrisAlgo(CornerDetector):
             "count": int(points_xy.shape[0]),
             "response": response,
         }
-
 
 class ShiTomasiAlgo(CornerDetector):
     def __init__(self, max_corners: int = 200, quality_level: float = 0.01, min_distance: float = 8.0):
@@ -210,7 +216,7 @@ class GeometryFeaturePipeline(BasePipeline):
         return out, count
     
     @valid_input
-    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray]) -> Dict[str, Any]:
+    def run(self, input: Union[str, List[str], List[np.ndarray], np.ndarray], visualize=True) -> Dict[str, Any]:
         """
         Run EdgeLineCornerPipeline.
         
@@ -246,23 +252,116 @@ class GeometryFeaturePipeline(BasePipeline):
         result: Dict[str, Any] = {
             "rgb_images": rgb_images,
             "gray_images": gray_images,
-            "edges_images": edges_images,
-            "lines_images": lines_images,
-            "corners_images": corners_images,
+            "Edge Detection": edges_images,
+            "Line Detection": lines_images,
+            "Corner Detection": corners_images,
             "metrics": metrics,
             "num_images": len(rgb_images),
         }
-        self.visualize(result, "corners_images", "Corner Detection")
-        self.visualize(result, "lines_images", "Line Detection")
-        self.visualize(result, "edges_images", "Edge Detection")
+        if visualize:
+            self.visualize(result, ["Corner Detection", "Edge Detection", "Line Detection"], "Geometry Feature Detection")
+            print("Geometry Feature Detection - Metrics")
+            print(result["metrics"])
         return result
-        
+
+@valid_input
+def compare_detector(
+    input: Union[str, List[str], List[np.ndarray], np.ndarray],
+    max_images: Optional[int] = None,
+):
+    """
+    Compare all available detectors for corner, edge and line features.
+
+    For each task type, this function renders one figure where:
+    - First column: input image.
+    - Remaining columns: outputs of each available algorithm.
+    """
+    preprocess = DataPreprocessorPipeline(apply_smoothing=True)
+    reader = GeometryFeaturePipeline()
+    rgb_images = reader._read_input(input)
+    rgb_images = preprocess.run(rgb_images, visualize=False)["rgb_images"]
+    if max_images is not None:
+        max_images = int(max(1, max_images))
+        rgb_images = rgb_images[:max_images]
+
+    # Available corner detectors.
+    corner_detectors: List[Tuple[str, CornerDetector]] = [
+        ("Harris", HarrisAlgo(block_size=2, ksize=3, k=0.04, threshold_ratio=0.01)),
+        (
+            "Shi-Tomasi",
+            ShiTomasiAlgo(max_corners=500, quality_level=0.01, min_distance=8.0),
+        ),
+    ]
+
+    # Available edge detectors.
+    edge_detectors: List[Tuple[str, EdgeDetector]] = [
+        ("Sobel-X", SobelFilter(ksize=3, threshold=30, dx=1, dy=0)),
+        ("Sobel-Y", SobelFilter(ksize=3, threshold=30, dx=0, dy=1)),
+        ("Sobel", SobelFilter(ksize=3, threshold=30, dx=1, dy=1)),
+        ("Laplacian", LaplacianFilter(ksize=3, threshold=30)),
+        ("Canny", Canny(threshold1=50, threshold2=150, aperture_size=3)),
+    ]
+
+    # Available line detectors.
+    line_detectors: List[Tuple[str, LineDetector]] = [
+        ("HoughLinesP", LineDetector(threshold=200, min_line_length=100, max_line_gap=10)),
+    ]
+
+    # Corner comparison plot.
+    corner_result: Dict[str, Any] = {"rgb_images": rgb_images}
+    corner_keys: List[str] = []
+    for name, detector in corner_detectors:
+        pipeline = GeometryFeaturePipeline(corner_detector=detector)
+        out = pipeline.run(rgb_images, visualize=False)
+        print(out["metrics"])
+        key = f"Corner - {name}"
+        corner_result[key] = out["Corner Detection"]
+        corner_keys.append(key)
+    reader.visualize(corner_result, corner_keys, "Corner Detector Comparison")
+
+    # Edge comparison plot.
+    edge_result: Dict[str, Any] = {"rgb_images": rgb_images}
+    edge_keys: List[str] = []
+    for name, detector in edge_detectors:
+        pipeline = GeometryFeaturePipeline(edge_detector=detector)
+        out = pipeline.run(rgb_images, visualize=False)
+        key = f"Edge - {name}"
+        edge_result[key] = out["Edge Detection"]
+        edge_keys.append(key)
+    reader.visualize(edge_result, edge_keys, "Edge Detector Comparison")
+
+    # Line comparison plot.
+    line_result: Dict[str, Any] = {"rgb_images": rgb_images}
+    line_keys: List[str] = []
+    for name, detector in line_detectors:
+        for edge_name, edge_detector in edge_detectors:
+            pipeline = GeometryFeaturePipeline(
+                edge_detector=edge_detector,
+                line_detector=detector,
+            )
+            out = pipeline.run(rgb_images, visualize=False)
+            print(out["metrics"])
+            key = f"{name} ({edge_name})"
+            line_result[key] = out["Line Detection"]
+            line_keys.append(key)
+    reader.visualize(line_result, line_keys, "Line Detector Comparison")
+
+    return {
+        "corner": corner_result,
+        "edge": edge_result,
+        "line": line_result,
+    }
+    
 def main():
-    pipeline = GeometryFeaturePipeline(edge_detector=Canny(threshold1=50, threshold2=150),
-                                       corner_detector=ShiTomasiAlgo(),
-                                       line_detector=LineDetector(200, 130, 10))
+    # pipeline = GeometryFeaturePipeline(edge_detector=Canny(threshold1=50, threshold2=150),
+    #                                    corner_detector=ShiTomasiAlgo(),
+    #                                    line_detector=LineDetector(200, 130, 10))
+    # data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
+    # image_paths = [os.path.join(data_dir, file_name) for file_name in sorted(os.listdir(data_dir))]
+    # compare_detector(image_paths)
     data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
-    pipeline.run([os.path.join(data_dir, dir) for dir in os.listdir(data_dir)])
+    image_paths = [os.path.join(data_dir, file_name) for file_name in sorted(os.listdir(data_dir))]
+    compare_detector(image_paths)
     
 if __name__ == "__main__":
     main()

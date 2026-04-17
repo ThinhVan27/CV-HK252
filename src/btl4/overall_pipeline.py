@@ -25,13 +25,15 @@ class OverallSceneAnalysisPipeline(BasePipeline):
     """
     Scence Analysis Pipeline
     """
-    def __init__(self, segmentation_pipeline: Optional[SegmentationPipeline] = None):
+    def __init__(self):
         # Composition của các pipeline con
-        self.preprocessor = DataPreprocessorPipeline()
-        self.geometry_1 = GeometryFeaturePipeline()
-        self.geometry_2 = PanoramaStitchingPipeline()
+        self.preprocessor = DataPreprocessorPipeline(apply_smoothing=True)
+        self.geometry_1 = GeometryFeaturePipeline(edge_detector=Canny(threshold1=50, threshold2=150),
+                                       corner_detector=ShiTomasiAlgo(),
+                                       line_detector=LineDetector(150, 100, 10))
+        self.geometry_2 = PanoramaStitchingPipeline({"extractor": SIFT(), "blending": AlphaBlending()})
         self.detection = ObjectDetectionPipeline()
-        self.segmentation = segmentation_pipeline if segmentation_pipeline is not None else SegmentationPipeline()
+        self.segmentation = SegmentationPipeline()
 
         self.last_results = {}
 
@@ -40,8 +42,9 @@ class OverallSceneAnalysisPipeline(BasePipeline):
         input: Union[str, List[str], List[np.ndarray]],
         visualize: bool = True,
         run_geometry_1: bool = True,
-        run_segmentation: bool = False,
-        run_detection: bool = False,
+        run_geometry_2: bool = True,
+        run_segmentation: bool = True,
+        run_detection: bool = True,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Run all pipeline and return each pipeline's result.
@@ -50,25 +53,26 @@ class OverallSceneAnalysisPipeline(BasePipeline):
             @input: either image path, list of image paths or image tensor.
         """
         res = {}
-        res['preprocess'] = self.preprocessor.run(input)
+        res['preprocess'] = self.preprocessor.run(input, visualize=False)
 
-        preprocessed_rgb = res['preprocess']["rgb_images"]
-        if visualize:
-            self.visualize(res['preprocess'], "rgb_images", "Smooth Image")
+        preprocessed_rgb = res['preprocess']["preprocessed_imgs"]
 
         if run_geometry_1:
             res['geometry_1'] = self.geometry_1.run(preprocessed_rgb)
-
-        if run_segmentation:
-            res['segmentation'] = self.segmentation.run(preprocessed_rgb, visualize=visualize)
-
+        
+        if run_geometry_2:
+            res["stitching"] = self.geometry_2.run(preprocessed_rgb)
+        stitching_img = [res["stitching"]["result"]]
         if run_detection:
-            res['detection'] = self.detection.run(preprocessed_rgb, visualize=visualize)
+            res['detection'] = self.detection.run(stitching_img, visualize=visualize, hog=False)
+            
+        if run_segmentation:
+            res['segmentation'] = self.segmentation.run(stitching_img, visualize=visualize)
 
         self.last_results = res
         return res
 
 if __name__ == "__main__":
-    data_dir = os.path.abspath(r"img\btl4\GeometryFeature")
+    data_dir = os.path.abspath(r"img\btl4\Overall")
     pipeline = OverallSceneAnalysisPipeline()
     pipeline.run([os.path.join(data_dir, dir) for dir in os.listdir(data_dir)])
