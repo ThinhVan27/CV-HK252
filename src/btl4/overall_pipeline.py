@@ -64,7 +64,7 @@ class OverallSceneAnalysisPipeline(BasePipeline):
             res["stitching"] = self.geometry_2.run(preprocessed_rgb)
         stitching_img = [res["stitching"]["result"]]
         if run_detection:
-            res['detection'] = self.detection.run(stitching_img, visualize=visualize, hog=False)
+            res['detection'] = self.detection.run(stitching_img, visualize=visualize)
             
         if run_segmentation:
             res['segmentation'] = self.segmentation.run(stitching_img, visualize=visualize)
